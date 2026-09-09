@@ -1,6 +1,6 @@
 # CSV / Excel Data Cleaner
 
-A private, browser-based tool for cleaning spreadsheet data before export.
+A browser-based tool that cleans spreadsheet data locally before export.
 
 The app works with CSV and Excel (`.xlsx`) files. It lets you preview a sheet, choose cleaning rules, correct values directly in the cleaned preview, and download the result as CSV or Excel.
 
