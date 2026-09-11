@@ -1,0 +1,16 @@
+{
+  "name": "csv-excel-data-cleaner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/build.mjs --check",
+    "test": "node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs",
+    "audit": "node scripts/audit.mjs",
+    "check": "node scripts/build.mjs --check && node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs && node scripts/build.mjs && node scripts/audit.mjs"
+  }
+}

@@ -16,18 +16,33 @@ The app works with CSV and Excel (`.xlsx`) files. It lets you preview a sheet, c
 - Flag invalid email addresses and dates for review
 - Edit any cleaned cell before downloading
 - Browse every row through a responsive, virtualized table
-- Detect the likely header row within the first 20 rows and let the user change it
+- Use the first non-empty row as the safe header default and let the user choose another row
+- Preserve cells beyond the selected header width by creating clearly labelled `Column N` headers
 - Choose a worksheet from an Excel workbook
 - Export the selected cleaned sheet as `.csv` or `.xlsx`
-- Warn before exporting cells that could be interpreted as spreadsheet formulas, then let the user choose a safe text export or the original values
+- Warn before exporting cells that could be interpreted as spreadsheet formulas, then let the user choose a quoted safe-text export or the original values
+- Process hosted files in a background worker and stop stalled work after 30 seconds
 
 ## Privacy
 
 Files are processed locally in the browser. The app does not send spreadsheet contents to an application server and does not store them in a database.
 
-## Run locally
+## Use it
 
-No build step is required. Open `index.html` in a browser, or serve this folder with a simple local web server.
+The public GitHub Pages version is the recommended way to use the app. Clients do not need to install or compile anything.
+
+For a portable backup, download the repository and open `index.html` directly. Direct-open mode supports files up to 10 MB; the hosted version supports files up to 50 MB and keeps heavy parsing away from the interface thread.
+
+## Develop it
+
+The editable source is TypeScript in `src/`. Node.js 24 or newer is enough; the repository has no package-install step.
+
+```text
+node scripts/build.mjs
+node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs
+```
+
+The build writes browser-ready `app.js` and `xlsx-worker.js`. Those generated files are committed so end users never need the TypeScript toolchain.
 
 ## Demo data
 
@@ -35,7 +50,8 @@ No build step is required. Open `index.html` in a browser, or serve this folder 
 
 ## Limits of this version
 
-Files are limited to 50 MB so the browser stays responsive; actual speed depends on the device and the file's structure.
+Hosted files are limited to 50 MB and direct-open files to 10 MB. Actual speed depends on the device and the file's structure.
+
+CSV input must be UTF-8 and may use comma, semicolon, or tab delimiters. Two-digit years are treated as 2000–2099; use four-digit years for older dates.
 
 Excel files are treated as table data. The export does not aim to preserve workbook formulas, styling, charts, or worksheets that were not selected. Legacy `.xls` files are not supported.
-

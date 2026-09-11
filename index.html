@@ -2,12 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="A local, browser-based CSV and Excel data cleaning demo." />
     <title>Data Cleaner — local CSV & Excel cleanup</title>
+    <script>
+      (() => {
+        try {
+          const savedTheme = localStorage.getItem("data-cleaner-theme");
+          const theme = savedTheme === "dark" || savedTheme === "light"
+            ? savedTheme
+            : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch {
+          // Keep the light theme when browser storage or media queries are unavailable.
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
-    <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script defer src="app.js?v=2"></script>
+    <script defer src="vendor/xlsx.full.min.js"></script>
+    <script defer src="app.js?v=4"></script>
   </head>
   <body>
     <main class="app-shell" aria-label="Data Cleaner">
@@ -21,6 +34,15 @@
             </span>
             <span><strong>Your data stays private</strong><small>Files are processed in your browser</small></span>
           </div>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" aria-label="Switch to dark theme" title="Switch to dark theme">
+            <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.4 15.2A8.5 8.5 0 0 1 8.8 3.6 8.5 8.5 0 1 0 20.4 15.2Z"/></svg>
+            <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg>
+            <span id="themeToggleLabel">Dark</span>
+          </button>
+          <div class="processing-status" id="processingStatus" role="status" aria-live="polite" hidden>
+            <span class="processing-spinner" aria-hidden="true"></span>
+            <span id="processingStatusCopy">Processing file…</span>
+          </div>
         </header>
 
         <section class="r-file-intake file-card" aria-label="File intake">
@@ -33,7 +55,7 @@
             <span class="change-file" id="changeFile">Choose file</span>
           </button>
           <span class="sr-only" id="fileHelp">Choose a CSV or Excel file. Files stay in your browser.</span>
-          <p class="file-limit">Files up to 50 MB. Larger files may take longer to process.</p>
+          <p class="file-limit" id="fileLimit">Files up to 50 MB. Larger files may take longer to process.</p>
           <p class="file-error" id="fileError" role="alert" hidden></p>
         </section>
 
@@ -122,7 +144,7 @@
           <div class="r-results download-area">
             <button id="downloadButton" class="download-button" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
-              Download cleaned file
+              <span id="downloadButtonLabel">Download cleaned file</span>
             </button>
             <small id="downloadMeta">CSV · 0 rows · demo data</small>
           </div>
@@ -143,4 +165,3 @@
     </main>
   </body>
 </html>
-

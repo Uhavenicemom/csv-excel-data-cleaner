@@ -1,2 +1,6 @@
 .impeccable/
-
+.agents/
+.skill-backups/
+impeccable-skill-*/
+node_modules/
+*.tsbuildinfo

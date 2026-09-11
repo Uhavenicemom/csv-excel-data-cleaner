@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Data Cleaner worker test</title>
+    <script src="../vendor/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <pre id="result">RUNNING</pre>
+    <script>
+      (() => {
+        const output = document.querySelector("#result");
+        const worker = new Worker("../xlsx-worker.js");
+        let requestId = 0;
+        const pending = new Map();
+
+        worker.onmessage = (event) => {
+          const request = pending.get(event.data.id);
+          if (!request) return;
+          pending.delete(event.data.id);
+          event.data.ok ? request.resolve(event.data) : request.reject(new Error(event.data.error));
+        };
+
+        const call = (message, transfer = []) => new Promise((resolve, reject) => {
+          const id = ++requestId;
+          pending.set(id, { resolve, reject });
+          worker.postMessage({ id, ...message }, transfer);
+        });
+
+        (async () => {
+          const workbook = XLSX.utils.book_new();
+          const sheet = XLSX.utils.aoa_to_sheet([
+            ["Name", "Date"],
+            ["Ada", new Date(2025, 0, 4), "extra cell"]
+          ]);
+          XLSX.utils.book_append_sheet(workbook, sheet, "Customers");
+          const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+          const parsed = await call({ type: "parse", fileType: "xlsx", buffer }, [buffer]);
+          if (parsed.rows[1].length !== 3) throw new Error("The worker dropped an extra cell.");
+          if (!(parsed.rows[1][1] instanceof Date)) throw new Error("The worker did not preserve the date value.");
+
+          const exported = await call({
+            type: "export",
+            format: "csv",
+            rows: [["=1+1", "plain"]],
+            quoteAll: true
+          });
+          const bytes = new Uint8Array(exported.buffer);
+          const csv = new TextDecoder().decode(exported.buffer);
+          if (bytes[0] !== 0xEF || bytes[1] !== 0xBB || bytes[2] !== 0xBF) {
+            throw new Error("The CSV export has no UTF-8 byte-order mark.");
+          }
+          if (csv !== '"=1+1","plain"') throw new Error("The safe CSV export was not fully quoted.");
+          output.textContent = "PASS";
+        })().catch((error) => {
+          output.textContent = `FAIL: ${error.message}`;
+        }).finally(() => worker.terminate());
+      })();
+    </script>
+  </body>
+</html>
