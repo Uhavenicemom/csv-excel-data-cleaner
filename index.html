@@ -5,26 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="A local, browser-based CSV and Excel data cleaning demo." />
     <title>Data Cleaner — local CSV & Excel cleanup</title>
-    <link rel="preconnect" href="https://cdn.sheetjs.com" />
     <link rel="stylesheet" href="styles.css" />
     <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script defer src="app.js"></script>
+    <script defer src="app.js?v=2"></script>
   </head>
   <body>
     <main class="app-shell" aria-label="Data Cleaner">
       <section class="comp-frame" id="app">
         <header class="r-topbar topbar">
-          <div class="r-brand brand" aria-label="Data Cleaner">Data Cleaner</div>
+          <h1 class="r-brand brand">Data Cleaner</h1>
           <p class="r-tagline tagline">Clean and standardize your data, ready to use.</p>
           <div class="r-privacy-copy privacy-copy">
             <span class="privacy-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
             </span>
             <span><strong>Your data stays private</strong><small>Files are processed in your browser</small></span>
-          </div>
-          <div class="r-top-status top-status" aria-live="polite">
-            <span class="ready-chip"><span></span>Ready</span>
-            <span class="file-chip" id="fileStatus">No file uploaded</span>
           </div>
         </header>
 
@@ -35,12 +30,14 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3.75h8l4 4V20.25H6z"/><path d="M14 3.75v4h4"/></svg>
             </span>
             <span class="file-copy"><strong id="fileName">customers_dirty.csv</strong><small id="fileMeta">Demo data · 10 rows</small></span>
-            <span class="change-file">Change file</span>
+            <span class="change-file" id="changeFile">Choose file</span>
           </button>
           <span class="sr-only" id="fileHelp">Choose a CSV or Excel file. Files stay in your browser.</span>
+          <p class="file-limit">Files up to 50 MB. Larger files may take longer to process.</p>
+          <p class="file-error" id="fileError" role="alert" hidden></p>
         </section>
 
-        <section class="controls-row" aria-label="Output and worksheet settings">
+        <section class="controls-row" aria-label="File, header, and date settings">
           <label>Output format
             <select id="outputFormat">
               <option value="csv">CSV (.csv)</option>
@@ -50,12 +47,22 @@
           <label id="worksheetField">Worksheet <span>(Excel only)</span>
             <select id="worksheetSelect" disabled><option>Sheet1</option></select>
           </label>
-          <label>Date format
+          <label>Header row
+            <select id="headerRowSelect"><option value="0">Row 1</option></select>
+          </label>
+          <label>Input date order
+            <select id="inputDateOrder">
+              <option value="DD-MM-YY">DD-MM-YY (31-01-24)</option>
+              <option value="MM-DD-YY">MM-DD-YY (01-31-24)</option>
+            </select>
+          </label>
+          <label>Output date format
             <select id="dateFormat">
               <option value="DD-MM-YY">DD-MM-YY</option>
               <option value="MM-DD-YY">MM-DD-YY</option>
               <option value="YY-MM-DD">YY-MM-DD</option>
             </select>
+            <span class="field-hint" id="dateSettingsHelp" hidden></span>
           </label>
         </section>
 
@@ -64,53 +71,76 @@
           <div class="r-rules rule-options">
             <label class="check-option"><input id="removeEmpty" type="checkbox" checked /><span></span>Remove empty rows</label>
             <label class="check-option"><input id="trimWhitespace" type="checkbox" checked /><span></span>Trim whitespace</label>
-            <label class="check-option"><input id="deduplicate" type="checkbox" checked /><span></span>De-duplicate by column</label>
-            <label class="inline-select"><span class="sr-only">Duplicate column</span><select id="dedupColumn"></select></label>
-            <label class="check-option"><input id="validateEmail" type="checkbox" checked /><span></span>Validate emails</label>
-            <label class="inline-select secondary-select"><span class="sr-only">Email column</span><select id="emailColumn"></select></label>
-            <label class="check-option"><input id="normalizeDates" type="checkbox" checked /><span></span>Normalize dates</label>
-            <label class="inline-select secondary-select"><span class="sr-only">Date column</span><select id="dateColumn"></select></label>
+            <div class="rule-pair" id="dedupRule">
+              <label class="check-option"><input id="deduplicate" type="checkbox" /><span></span>De-duplicate by column</label>
+              <span class="column-summary" id="dedupSummary"></span>
+              <button class="change-column" id="dedupChange" type="button" aria-expanded="false">Change</button>
+              <label class="inline-select" id="dedupPicker" hidden><span class="sr-only">Duplicate column</span><select id="dedupColumn"></select></label>
+            </div>
+            <div class="rule-pair" id="emailRule">
+              <label class="check-option"><input id="validateEmail" type="checkbox" checked /><span></span>Validate emails</label>
+              <span class="column-summary" id="emailSummary"></span>
+              <button class="change-column" id="emailChange" type="button" aria-expanded="false">Change</button>
+              <label class="inline-select secondary-select" id="emailPicker" hidden><span class="sr-only">Email column</span><select id="emailColumn"></select></label>
+            </div>
+            <div class="rule-pair" id="dateRule">
+              <label class="check-option"><input id="normalizeDates" type="checkbox" checked /><span></span>Normalize dates</label>
+              <span class="column-summary" id="dateSummary"></span>
+              <button class="change-column" id="dateChange" type="button" aria-expanded="false">Change</button>
+              <label class="inline-select secondary-select" id="datePicker" hidden><span class="sr-only">Date column</span><select id="dateColumn"></select></label>
+            </div>
           </div>
         </section>
 
+        <section class="insights-panel" id="insightsPanel" aria-label="Data checks" hidden></section>
+
         <section class="r-before-heading table-heading before-heading" aria-labelledby="beforeTitle">
-          <div><h1 id="beforeTitle">Before</h1><span>Original data</span></div>
-          <p id="beforeCount">10 of 10 rows</p>
+          <div><h2 id="beforeTitle">Before</h2><span>Original data</span></div>
+          <p id="beforeCount">0 rows</p>
         </section>
-        <section class="r-before-table table-region before-region" aria-label="Original data preview">
+        <section class="r-before-table table-region before-region" aria-label="Original data">
           <div class="table-scroll"><table id="beforeTable"></table></div>
         </section>
 
-        <div class="r-comparison-gutter comparison-gutter" aria-hidden="true"><span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </span></div>
-
         <section class="r-after-heading table-heading after-heading" aria-labelledby="afterTitle">
-          <div><h2 id="afterTitle">Cleaned preview</h2><span title="Click any value below to edit it">Changes applied</span></div>
-          <p id="afterCount">10 of 10 rows (preview)</p>
+          <div><h2 id="afterTitle">Cleaned data</h2><span>Click a value to edit</span></div>
+          <p id="afterCount">0 rows</p>
         </section>
-        <section class="r-after-table table-region after-region" aria-label="Cleaned data preview">
+        <section class="r-after-table table-region after-region" aria-label="Cleaned data">
           <div class="table-scroll"><table id="afterTable"></table></div>
         </section>
 
-        <footer class="results-panel" aria-live="polite">
+        <footer class="results-panel">
           <div class="r-results-copy results-intro"><strong>Results</strong><small>Here's what we changed</small></div>
           <dl class="result-list">
             <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5h14v14H5zM5 10h14M10 5v14"/></svg></span><b id="changedCount">0</b></dt><dd>Rows changed</dd></div>
-            <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m5 7 7 5 7-5"/></svg></span><b id="invalidEmailCount">0</b></dt><dd>Invalid emails flagged</dd></div>
+            <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5h14v14H5zM5 10h14"/></svg></span><b id="emptyCount">0</b></dt><dd>Blank rows removed</dd></div>
             <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span><b id="dateCount">0</b></dt><dd>Dates normalized</dd></div>
             <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="13" height="13" rx="1"/><path d="M8 9h12v11H9"/></svg></span><b id="duplicateCount">0</b></dt><dd>Duplicate rows removed</dd></div>
+            <div><dt><span class="result-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3.5 19h17z"/><path d="M12 9v4m0 3h.01"/></svg></span><b id="issueCount">0</b></dt><dd>Values to review</dd></div>
           </dl>
           <div class="r-results download-area">
             <button id="downloadButton" class="download-button" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
               Download cleaned file
             </button>
-            <small id="downloadMeta">CSV · 10 rows · demo preview</small>
+            <small id="downloadMeta">CSV · 0 rows · demo data</small>
           </div>
         </footer>
         <p class="sr-only" id="announcer" aria-live="polite"></p>
+        <dialog class="formula-dialog" id="formulaDialog" aria-labelledby="formulaDialogTitle">
+          <form method="dialog">
+            <h2 id="formulaDialogTitle">Potential spreadsheet formulas found</h2>
+            <p id="formulaDialogCopy">Some cells begin with a formula character. Choose how to export them.</p>
+            <div class="formula-actions">
+              <button class="download-button" id="safeDownloadButton" value="safe" type="submit">Download safe version</button>
+              <button class="secondary-button" id="originalDownloadButton" value="original" type="submit">Download original</button>
+              <button class="text-button" id="cancelFormulaButton" value="cancel" type="submit">Cancel</button>
+            </div>
+          </form>
+        </dialog>
       </section>
     </main>
   </body>
 </html>
+
