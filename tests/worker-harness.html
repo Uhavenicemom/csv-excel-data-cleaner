@@ -51,6 +51,15 @@
             throw new Error("The CSV export has no UTF-8 byte-order mark.");
           }
           if (csv !== '"=1+1","plain"') throw new Error("The safe CSV export was not fully quoted.");
+
+          const wideCsv = new TextEncoder().encode(`${Array.from({ length: 257 }, (_, index) => `Column ${index + 1}`).join(",")}\n`);
+          let oversizedRejected = false;
+          try {
+            await call({ type: "parse", fileType: "csv", buffer: wideCsv.buffer }, [wideCsv.buffer]);
+          } catch (error) {
+            oversizedRejected = /more than 256 columns/.test(error.message);
+          }
+          if (!oversizedRejected) throw new Error("The worker accepted a table beyond the structural limits.");
           output.textContent = "PASS";
         })().catch((error) => {
           output.textContent = `FAIL: ${error.message}`;

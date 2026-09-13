@@ -19,4 +19,10 @@ test("reads and writes XLSX table data with dates", async () => {
   const exported = writeWorkbook(api, sourceRows);
   const workbook = readWorkbook(api, exported);
   assert.deepEqual(JSON.parse(JSON.stringify(sheetRows(api, workbook, "Cleaned data"))), sourceRows);
+
+  const oversizedSheet = api.utils.aoa_to_sheet([["Name"]]);
+  oversizedSheet["!ref"] = "A1:A200001";
+  const oversizedWorkbook = api.utils.book_new();
+  api.utils.book_append_sheet(oversizedWorkbook, oversizedSheet, "Oversized");
+  assert.throws(() => sheetRows(api, oversizedWorkbook, "Oversized"), /more than 200,000 rows/);
 });

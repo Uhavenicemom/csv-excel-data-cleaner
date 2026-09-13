@@ -5,6 +5,7 @@ import { cleanRows } from "../src/cleaning.ts";
 import { csvToRows, decodeUtf8, detectCsvDelimiter, serializeCsv } from "../src/csv.ts";
 import { parseDate } from "../src/dates.ts";
 import { isFormulaLike, makeSpreadsheetSafe } from "../src/security.ts";
+import { assertTableLimits, type TabularLimits } from "../src/limits.ts";
 import { findHeaderRow, prepareSheet } from "../src/sheets.ts";
 import type { CleaningSettings } from "../src/types.ts";
 import { cellToString } from "../src/value.ts";
@@ -50,6 +51,22 @@ test("detects comma, semicolon, and tab-delimited files", () => {
 
 test("rejects malformed UTF-8 instead of silently replacing bytes", () => {
   assert.throws(() => decodeUtf8(new Uint8Array([0xc3, 0x28]).buffer), /UTF-8/);
+  const intentionalReplacement = new TextEncoder().encode("Name\r\nA\uFFFDB").buffer;
+  assert.equal(decodeUtf8(intentionalReplacement), "Name\r\nA\uFFFDB");
+});
+
+test("stops oversized tables before they can overwhelm the interface", () => {
+  const limits: TabularLimits = {
+    maxRows: 2,
+    maxColumns: 2,
+    maxCells: 6,
+    maxCellCharacters: 4,
+    maxSheets: 1
+  };
+  assert.throws(() => csvToRows("a,b,c", limits), /more than 2 columns/);
+  assert.throws(() => csvToRows("a,b\n1,2\n3,4", limits), /more than 2 rows/);
+  assert.throws(() => csvToRows("header\nvalue", limits), /more than 4 characters/);
+  assert.throws(() => assertTableLimits([["a", "b"], ["c", "d", "e"]], limits), /more than 2 columns/);
 });
 
 test("preserves cells that extend beyond the selected header row", () => {
