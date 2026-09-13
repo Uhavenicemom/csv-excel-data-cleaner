@@ -48,7 +48,7 @@ if (/src="vendor\/xlsx\.full\.min\.js"/.test(html)) failures.push("The Excel lib
 if (!/<div class="table-scroll"[^>]+role="region"[^>]+tabindex="0"/i.test(html)) failures.push("Scrollable tables are not keyboard-focusable regions.");
 if (!/"typecheck"\s*:\s*"tsc --noEmit"/.test(packageJson)) failures.push("The typecheck command does not run the TypeScript compiler.");
 if (/"pnpm"\s*:/.test(packageJson)) failures.push("pnpm settings must live in pnpm-workspace.yaml, not package.json.");
-if (!/^onlyBuiltDependencies:\s*\r?\n\s+- esbuild\s*$/m.test(pnpmWorkspace)) failures.push("The pnpm build-script allowlist is missing or broader than esbuild.");
+if (!/^allowBuilds:\s*\r?\n\s+esbuild:\s*true\s*$/m.test(pnpmWorkspace)) failures.push("The pnpm build-script allowlist is missing or broader than esbuild.");
 if (!/maxCells:\s*2_000_000/.test(source)) failures.push("The structural table limits are missing.");
 if (!/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(styles)) failures.push("The hidden-state CSS guard is missing.");
 if (!app.includes("initialize();")) failures.push("The generated app bundle does not initialize.");
