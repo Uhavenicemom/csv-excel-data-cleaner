@@ -1,0 +1,23 @@
+import type { CellValue } from "./types.ts";
+
+export const SAMPLE_HEADERS = ["Customer ID", "Full Name", "Email", "Sign Up Date", "Amount", "Country", "Notes"];
+
+export const SAMPLE_ROWS: CellValue[][] = [
+  ["C-1042", "  Ava Nguyen  ", " ava.nguyen@example.com ", "2025/01/04", "99.00", "USA", "First order"],
+  ["C-1043", "Mateo Silva", "mateo.silva@example.com", "04-01-25", "149", "Brazil", "Asked for invoice"],
+  ["C-1044", "Priya Shah", "invalid-email", "Jan 6, 2025", "200.00", "India", "Contact before renewal"],
+  ["", "", "", "", "", "", ""],
+  ["C-1046", "Noah Williams", "noah.williams@example.com", "1/7/25", "99", "Canada", " "],
+  ["C-1047", "Elena Rossi", "elena.rossi@example.com", "2025-01-07", "99.0", "Italy", "Customer requested VAT receipt"],
+  ["C-1048", "Ava Nguyen", "ava.nguyen@example.com", "2025/01/04", "99.00", "USA", "Duplicate import"],
+  ["C-1049", "Liam O'Connor", "liam.oconnor@example.com", "13/01/2025", "250", "Ireland", "Priority account"],
+  ["C-1050", "Samira Khan", "samira.khan@example.com", "01-08-2025", "175", "United Arab Emirates", "Check preferred language"],
+  ["C-1051", "Ryo Tanaka", "ryo.tanaka@example.com", "Jan 9 2025", "300", "Japan", "Renewal in Q1"],
+  ["C-1052", "Mira Chen", "mira.chen@example.com", "not-a-date", "80", "Singapore", "Missing source format"],
+  ["C-1053", "Theo Martin", "theo.martin@example.com", "31/02/2025", "125", "France", "Date typed manually"],
+  ["C-1054", "Lina Petrov", "lina.petrov@example.com", "2025/01/15", "=SUM(80, 45)", "Ukraine", "Formula-like amount"],
+  ["C-1055", "Dev Patel", "dev.patel@example", "15 Jan 2025", "199.95", "India", "Email needs review"],
+  ["C-1056", "  Chloe Martin", " chloe.martin@example.com", "2025/01/16", "149.50", "Czechia", "Follow-up"],
+  ["C-1057", "Nia Brooks", "nia.brooks@example.com", "2025-01-17", "220", "USA", " "],
+  ["C-1058", "Carlos Torres", "ryo.tanaka@example.com", "17/01/2025", "300", "Mexico", "Duplicate email"]
+];

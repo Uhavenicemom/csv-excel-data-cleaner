@@ -82,6 +82,7 @@ export interface XlsxApi {
   read(data: ArrayBuffer | Uint8Array, options?: Record<string, unknown>): XlsxWorkbook;
   utils: {
     sheet_to_json(sheet: unknown, options?: Record<string, unknown>): CellValue[][];
+    decode_range(range: string): { s: { r: number; c: number }; e: { r: number; c: number } };
     book_new(): XlsxWorkbook;
     aoa_to_sheet(rows: string[][]): unknown;
     book_append_sheet(workbook: XlsxWorkbook, sheet: unknown, name: string): void;

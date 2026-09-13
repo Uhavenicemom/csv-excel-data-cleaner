@@ -1,5 +1,6 @@
 import { csvToRows, decodeUtf8, serializeCsv } from "./csv.ts";
 import { hasXlsxSignature } from "./sheets.ts";
+import { assertTableLimits } from "./limits.ts";
 import type { OutputFormat, WorkerRequest, WorkerResponse, XlsxApi, XlsxWorkbook } from "./types.ts";
 import { normalizeError } from "./value.ts";
 import { readWorkbook, requireXlsx, sheetRows, writeWorkbook } from "./xlsx.ts";
@@ -34,6 +35,7 @@ function exportRows(
   rows: string[][],
   quoteAll: boolean
 ): { buffer: ArrayBuffer; mime: string; extension: OutputFormat } {
+  assertTableLimits(rows);
   if (format === "xlsx") {
     return {
       buffer: writeWorkbook(ensureXlsx(), rows),

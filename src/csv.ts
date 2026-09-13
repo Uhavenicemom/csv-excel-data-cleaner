@@ -1,14 +1,15 @@
 import type { CellValue } from "./types.ts";
+import { DATA_LIMITS, dataLimitError, type TabularLimits } from "./limits.ts";
 import { cellToString } from "./value.ts";
 
 const DELIMITERS = [",", ";", "\t"] as const;
 
 export function decodeUtf8(buffer: ArrayBuffer): string {
-  const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer).replace(/^\uFEFF/, "");
-  if (text.includes("\uFFFD")) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/^\uFEFF/, "");
+  } catch {
     throw new Error("This CSV is not valid UTF-8. Save it as UTF-8 in your spreadsheet app and try again.");
   }
-  return text;
 }
 
 export function detectCsvDelimiter(text: string): string {
@@ -30,13 +31,37 @@ export function detectCsvDelimiter(text: string): string {
   return [...counts.entries()].reduce((best, current) => current[1] > best[1] ? current : best, [",", 0] as [string, number])[0];
 }
 
-export function csvToRows(text: string): string[][] {
+export function csvToRows(text: string, limits: TabularLimits = DATA_LIMITS): string[][] {
   const source = text.replace(/^\uFEFF/, "");
   const delimiter = detectCsvDelimiter(source);
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
+  let cellCount = 0;
+
+  const pushCell = (): void => {
+    if (cell.length > limits.maxCellCharacters) {
+      throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+    }
+    if (row.length >= limits.maxColumns) {
+      throw dataLimitError(`This table contains more than ${limits.maxColumns.toLocaleString("en-US")} columns.`);
+    }
+    cellCount += 1;
+    if (cellCount > limits.maxCells) {
+      throw dataLimitError(`This table contains more than ${limits.maxCells.toLocaleString("en-US")} cells.`);
+    }
+    row.push(cell);
+    cell = "";
+  };
+
+  const pushRow = (): void => {
+    if (rows.length >= limits.maxRows) {
+      throw dataLimitError(`This table contains more than ${limits.maxRows.toLocaleString("en-US")} rows.`);
+    }
+    rows.push(row);
+    row = [];
+  };
 
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
@@ -48,22 +73,25 @@ export function csvToRows(text: string): string[][] {
         inQuotes = !inQuotes;
       }
     } else if (character === delimiter && !inQuotes) {
-      row.push(cell);
-      cell = "";
+      pushCell();
     } else if ((character === "\n" || character === "\r") && !inQuotes) {
       if (character === "\r" && source[index + 1] === "\n") index += 1;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
+      pushCell();
+      pushRow();
     } else {
       cell += character ?? "";
+      if (cell.length > limits.maxCellCharacters) {
+        throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+      }
     }
   }
 
   if (inQuotes) throw new Error("This CSV has an unmatched quotation mark. Fix the quotation marks and try again.");
-  row.push(cell);
-  if (row.some((value) => value !== "") || cell !== "") rows.push(row);
+  const hasFinalRow = row.some((value) => value !== "") || cell !== "";
+  if (hasFinalRow) {
+    pushCell();
+    pushRow();
+  }
   return rows;
 }
 
