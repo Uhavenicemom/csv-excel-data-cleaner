@@ -17,7 +17,7 @@ export function detectCsvDelimiter(text: string): string {
   let inQuotes = false;
   let lines = 0;
   for (let index = 0; index < text.length && lines < 12; index += 1) {
-    const character = text[index];
+    const character = text.charAt(index);
     if (character === '"') {
       if (inQuotes && text[index + 1] === '"') index += 1;
       else inQuotes = !inQuotes;
