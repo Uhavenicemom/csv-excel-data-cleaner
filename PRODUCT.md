@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Static HTML and CSS with TypeScript source compiled into browser-ready JavaScript. The build uses Node.js's built-in TypeScript transform, requires no package installation, and deploys to static hosting.
+Static HTML and CSS with strict TypeScript source bundled into browser-ready JavaScript with esbuild. Development uses pnpm; the committed browser bundles deploy directly to static hosting and require no client installation.
 
 ## Users
 
@@ -30,6 +30,8 @@ The visitor chooses a `.csv` or `.xlsx` file. GitHub Pages mode accepts up to 50
 
 - Accept CSV and XLSX files up to 50 MB on static hosting and up to 10 MB when opened directly; explain that processing speed depends on file size and device.
 - Parse and export hosted files in a background worker, with a timeout that recovers from stalled work.
+- Stop a hosted operation when its worker fails or times out; never retry heavy parsing or export on the interface thread.
+- Reject tables above 200,000 rows, 256 columns, or 2,000,000 cells, cells above 100,000 characters, and workbooks above 50 worksheets.
 - Accept UTF-8 comma-, semicolon-, and tab-delimited text. Reject malformed UTF-8 instead of silently replacing characters.
 - Offer worksheet selection for XLSX files.
 - Offer opt-in removal of blank rows, whitespace trimming, and duplicate removal by a suggested relevant column. Duplicate removal is off by default.

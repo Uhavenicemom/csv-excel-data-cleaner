@@ -29,20 +29,22 @@ Files are processed locally in the browser. The app does not send spreadsheet co
 
 ## Use it
 
-The public GitHub Pages version is the recommended way to use the app. Clients do not need to install or compile anything.
+Open the [public GitHub Pages demo](https://uhavenicemom.github.io/csv-excel-data-cleaner/). Clients do not need to install or compile anything.
 
 For a portable backup, download the repository and open `index.html` directly. Direct-open mode supports files up to 10 MB; the hosted version supports files up to 50 MB and keeps heavy parsing away from the interface thread.
 
 ## Develop it
 
-The editable source is TypeScript in `src/`. Node.js 24 or newer is enough; the repository has no package-install step.
+The editable source is TypeScript in `src/`. Install Node.js 24 or newer and pnpm 11, then run:
 
 ```text
-node scripts/build.mjs
-node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs
+pnpm install
+pnpm check
 ```
 
-The build writes browser-ready `app.js` and `xlsx-worker.js`. Those generated files are committed so end users never need the TypeScript toolchain.
+`pnpm check` runs the strict TypeScript check, verifies both browser bundles, runs the automated behavior tests, rebuilds `app.js` and `xlsx-worker.js`, and audits the static release files. Those generated files are committed so end users never need the TypeScript toolchain.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the module boundaries, processing flow, limits, and release checklist.
 
 ## Demo data
 
@@ -50,7 +52,9 @@ The build writes browser-ready `app.js` and `xlsx-worker.js`. Those generated fi
 
 ## Limits of this version
 
-Hosted files are limited to 50 MB and direct-open files to 10 MB. Actual speed depends on the device and the file's structure.
+Hosted files are limited to 50 MB and direct-open files to 10 MB. A table may contain at most 200,000 rows, 256 columns, 2,000,000 cells, 100,000 characters in one cell, and an Excel workbook may contain at most 50 worksheets. Actual speed depends on the device and the file's structure.
+
+If background processing fails or takes more than 30 seconds on the hosted app, the operation stops with an actionable message. It does not retry heavy parsing on the interface thread.
 
 CSV input must be UTF-8 and may use comma, semicolon, or tab delimiters. Two-digit years are treated as 2000–2099; use four-digit years for older dates.
 

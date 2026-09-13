@@ -159,7 +159,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [contenteditabl
 .file-copy { display: grid; min-width: 0; gap: 3px; }
 .file-copy strong { overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .file-copy small { color: var(--muted); font-size: 12px; }
-.change-file { margin-left: auto; color: var(--blue); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.change-file { flex: 0 0 auto; margin-left: auto; color: var(--blue); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .file-error { margin: 8px 2px 0; color: var(--amber); font-size: 13px; font-weight: 650; }
 .file-limit { margin: 7px 2px 0; color: var(--muted); font-size: 12px; }
 
@@ -210,7 +210,8 @@ select:disabled { color: var(--muted); background-color: var(--surface-muted); c
 .table-heading span { padding: 4px 8px; color: var(--muted); background: var(--surface-subtle); border-radius: 999px; font-size: 12px; white-space: nowrap; }
 .table-heading p { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .table-region { min-width: 0; height: clamp(300px, 34vw, 460px); overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); }
-.table-scroll { height: 100%; overflow: auto; }
+.table-scroll { height: 100%; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.table-scroll:focus-visible { outline: 3px solid var(--focus-ring-strong); outline-offset: -3px; }
 table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th, td { height: var(--table-row-height); padding: 7px 12px; color: var(--text); text-align: left; white-space: nowrap; border-right: 1px solid var(--line-subtle); border-bottom: 1px solid var(--line-subtle); }
 th { position: sticky; top: 0; z-index: 1; color: var(--muted); background: var(--surface-subtle); font-size: 12px; font-weight: 650; }
@@ -303,7 +304,7 @@ td .issue { display: inline-block; margin-left: 5px; color: var(--amber); font-s
   .comp-frame { padding: 15px; }
   .brand { font-size: 25px; }
   .file-drop { gap: 10px; }
-  .change-file { display: none; }
+  .change-file { margin-left: 4px; }
   .table-heading span { white-space: normal; }
   .result-list { grid-template-columns: 1fr; gap: 10px; }
   .result-list > div { padding-left: 0; border-left: 0; }

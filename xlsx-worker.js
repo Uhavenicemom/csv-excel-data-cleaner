@@ -25,19 +25,60 @@ return { isValidDateObject, cellToString, isBlankRow, normalizeError };
 })();
 const __module1 = (() => {
 const { cellToString } = __module0;
+const DATA_LIMITS = {
+    maxRows: 200_000,
+    maxColumns: 256,
+    maxCells: 2_000_000,
+    maxCellCharacters: 100_000,
+    maxSheets: 50
+};
+function dataLimitError(detail) {
+    return new Error(`${detail} Try a smaller or narrower table.`);
+}
+function assertCellLength(value, limits = DATA_LIMITS) {
+    if (cellToString(value).length > limits.maxCellCharacters) {
+        throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+    }
+}
+function assertSheetNames(sheetNames, limits = DATA_LIMITS) {
+    if (sheetNames.length > limits.maxSheets) {
+        throw dataLimitError(`This workbook contains more than ${limits.maxSheets.toLocaleString("en-US")} worksheets.`);
+    }
+}
+function assertTableLimits(rows, limits = DATA_LIMITS) {
+    if (rows.length > limits.maxRows) {
+        throw dataLimitError(`This table contains more than ${limits.maxRows.toLocaleString("en-US")} rows.`);
+    }
+    let cells = 0;
+    for (const row of rows){
+        if (row.length > limits.maxColumns) {
+            throw dataLimitError(`This table contains more than ${limits.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        cells += row.length;
+        if (cells > limits.maxCells) {
+            throw dataLimitError(`This table contains more than ${limits.maxCells.toLocaleString("en-US")} cells.`);
+        }
+        row.forEach((value)=>assertCellLength(value, limits));
+    }
+}
+return { DATA_LIMITS, dataLimitError, assertCellLength, assertSheetNames, assertTableLimits };
+})();
+const __module2 = (() => {
+const { DATA_LIMITS, dataLimitError } = __module1;
+const { cellToString } = __module0;
 const DELIMITERS = [
     ",",
     ";",
     "\t"
 ];
 function decodeUtf8(buffer) {
-    const text = new TextDecoder("utf-8", {
-        fatal: false
-    }).decode(buffer).replace(/^\uFEFF/, "");
-    if (text.includes("\uFFFD")) {
+    try {
+        return new TextDecoder("utf-8", {
+            fatal: true
+        }).decode(buffer).replace(/^\uFEFF/, "");
+    } catch  {
         throw new Error("This CSV is not valid UTF-8. Save it as UTF-8 in your spreadsheet app and try again.");
     }
-    return text;
 }
 function detectCsvDelimiter(text) {
     const counts = new Map(DELIMITERS.map((delimiter)=>[
@@ -65,13 +106,35 @@ function detectCsvDelimiter(text) {
         0
     ])[0];
 }
-function csvToRows(text) {
+function csvToRows(text, limits = DATA_LIMITS) {
     const source = text.replace(/^\uFEFF/, "");
     const delimiter = detectCsvDelimiter(source);
     const rows = [];
     let row = [];
     let cell = "";
     let inQuotes = false;
+    let cellCount = 0;
+    const pushCell = ()=>{
+        if (cell.length > limits.maxCellCharacters) {
+            throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+        }
+        if (row.length >= limits.maxColumns) {
+            throw dataLimitError(`This table contains more than ${limits.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        cellCount += 1;
+        if (cellCount > limits.maxCells) {
+            throw dataLimitError(`This table contains more than ${limits.maxCells.toLocaleString("en-US")} cells.`);
+        }
+        row.push(cell);
+        cell = "";
+    };
+    const pushRow = ()=>{
+        if (rows.length >= limits.maxRows) {
+            throw dataLimitError(`This table contains more than ${limits.maxRows.toLocaleString("en-US")} rows.`);
+        }
+        rows.push(row);
+        row = [];
+    };
     for(let index = 0; index < source.length; index += 1){
         const character = source[index];
         if (character === '"') {
@@ -82,21 +145,24 @@ function csvToRows(text) {
                 inQuotes = !inQuotes;
             }
         } else if (character === delimiter && !inQuotes) {
-            row.push(cell);
-            cell = "";
+            pushCell();
         } else if ((character === "\n" || character === "\r") && !inQuotes) {
             if (character === "\r" && source[index + 1] === "\n") index += 1;
-            row.push(cell);
-            rows.push(row);
-            row = [];
-            cell = "";
+            pushCell();
+            pushRow();
         } else {
             cell += character ?? "";
+            if (cell.length > limits.maxCellCharacters) {
+                throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+            }
         }
     }
     if (inQuotes) throw new Error("This CSV has an unmatched quotation mark. Fix the quotation marks and try again.");
-    row.push(cell);
-    if (row.some((value)=>value !== "") || cell !== "") rows.push(row);
+    const hasFinalRow = row.some((value)=>value !== "") || cell !== "";
+    if (hasFinalRow) {
+        pushCell();
+        pushRow();
+    }
     return rows;
 }
 function csvEscape(value, forceQuote = false) {
@@ -108,7 +174,7 @@ function serializeCsv(rows, forceQuote = false) {
 }
 return { decodeUtf8, detectCsvDelimiter, csvToRows, csvEscape, serializeCsv };
 })();
-const __module2 = (() => {
+const __module3 = (() => {
 const { cellToString } = __module0;
 const HEADER_SCAN_LIMIT = 20;
 function uniqueHeaders(headerRow) {
@@ -167,8 +233,8 @@ function hasXlsxSignature(buffer) {
 }
 return { HEADER_SCAN_LIMIT, uniqueHeaders, prepareSheet, rowPreview, headerCandidates, findHeaderRow, hasXlsxSignature };
 })();
-const __module3 = (() => {
-
+const __module4 = (() => {
+const { assertSheetNames, assertTableLimits, DATA_LIMITS, dataLimitError } = __module1;
 function requireXlsx(candidate) {
     if (!candidate) throw new Error("Excel support is unavailable. Reload the page and try again.");
     return candidate;
@@ -177,21 +243,41 @@ function readWorkbook(api, buffer) {
     const workbook = api.read(buffer, {
         type: "array",
         cellDates: true,
-        dense: true
+        dense: true,
+        sheetRows: DATA_LIMITS.maxRows + 1
     });
     if (!workbook.SheetNames.length) throw new Error("This Excel file has no worksheets.");
+    assertSheetNames(workbook.SheetNames);
     return workbook;
 }
 function sheetRows(api, workbook, sheetName) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) throw new Error(`Worksheet “${sheetName}” could not be found.`);
-    return api.utils.sheet_to_json(sheet, {
+    const range = typeof sheet === "object" && sheet !== null && "!ref" in sheet ? sheet["!ref"] : undefined;
+    if (typeof range === "string") {
+        const decoded = api.utils.decode_range(range);
+        const rows = decoded.e.r - decoded.s.r + 1;
+        const columns = decoded.e.c - decoded.s.c + 1;
+        if (rows > DATA_LIMITS.maxRows) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxRows.toLocaleString("en-US")} rows.`);
+        }
+        if (columns > DATA_LIMITS.maxColumns) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        if (rows * columns > DATA_LIMITS.maxCells) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxCells.toLocaleString("en-US")} cells.`);
+        }
+    }
+    const rows = api.utils.sheet_to_json(sheet, {
         header: 1,
         defval: "",
         raw: true
     });
+    assertTableLimits(rows);
+    return rows;
 }
 function writeWorkbook(api, rows) {
+    assertTableLimits(rows);
     const workbook = api.utils.book_new();
     const sheet = api.utils.aoa_to_sheet(rows);
     api.utils.book_append_sheet(workbook, sheet, "Cleaned data");
@@ -209,11 +295,12 @@ function writeWorkbook(api, rows) {
 }
 return { requireXlsx, readWorkbook, sheetRows, writeWorkbook };
 })();
-const __module4 = (() => {
-const { csvToRows, decodeUtf8, serializeCsv } = __module1;
-const { hasXlsxSignature } = __module2;
+const __module5 = (() => {
+const { csvToRows, decodeUtf8, serializeCsv } = __module2;
+const { hasXlsxSignature } = __module3;
+const { assertTableLimits } = __module1;
 const { normalizeError } = __module0;
-const { readWorkbook, requireXlsx, sheetRows, writeWorkbook } = __module3;
+const { readWorkbook, requireXlsx, sheetRows, writeWorkbook } = __module4;
 const scope = globalThis;
 let workbook = null;
 let api = null;
@@ -229,6 +316,7 @@ function send(response, transfer = []) {
     scope.postMessage(response, transfer);
 }
 function exportRows(format, rows, quoteAll) {
+    assertTableLimits(rows);
     if (format === "xlsx") {
         return {
             buffer: writeWorkbook(ensureXlsx(), rows),

@@ -287,380 +287,7 @@ function issuesForOriginalRow(row, headers, settings) {
 return { isEmail, cleanRows, issuesForOriginalRow };
 })();
 const __module3 = (() => {
-const { cellToString } = __module0;
-const DELIMITERS = [
-    ",",
-    ";",
-    "\t"
-];
-function decodeUtf8(buffer) {
-    const text = new TextDecoder("utf-8", {
-        fatal: false
-    }).decode(buffer).replace(/^\uFEFF/, "");
-    if (text.includes("\uFFFD")) {
-        throw new Error("This CSV is not valid UTF-8. Save it as UTF-8 in your spreadsheet app and try again.");
-    }
-    return text;
-}
-function detectCsvDelimiter(text) {
-    const counts = new Map(DELIMITERS.map((delimiter)=>[
-            delimiter,
-            0
-        ]));
-    let inQuotes = false;
-    let lines = 0;
-    for(let index = 0; index < text.length && lines < 12; index += 1){
-        const character = text[index];
-        if (character === '"') {
-            if (inQuotes && text[index + 1] === '"') index += 1;
-            else inQuotes = !inQuotes;
-        } else if (!inQuotes && DELIMITERS.includes(character)) {
-            counts.set(character, (counts.get(character) ?? 0) + 1);
-        } else if (!inQuotes && (character === "\n" || character === "\r")) {
-            if (character === "\r" && text[index + 1] === "\n") index += 1;
-            lines += 1;
-        }
-    }
-    return [
-        ...counts.entries()
-    ].reduce((best, current)=>current[1] > best[1] ? current : best, [
-        ",",
-        0
-    ])[0];
-}
-function csvToRows(text) {
-    const source = text.replace(/^\uFEFF/, "");
-    const delimiter = detectCsvDelimiter(source);
-    const rows = [];
-    let row = [];
-    let cell = "";
-    let inQuotes = false;
-    for(let index = 0; index < source.length; index += 1){
-        const character = source[index];
-        if (character === '"') {
-            if (inQuotes && source[index + 1] === '"') {
-                cell += '"';
-                index += 1;
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (character === delimiter && !inQuotes) {
-            row.push(cell);
-            cell = "";
-        } else if ((character === "\n" || character === "\r") && !inQuotes) {
-            if (character === "\r" && source[index + 1] === "\n") index += 1;
-            row.push(cell);
-            rows.push(row);
-            row = [];
-            cell = "";
-        } else {
-            cell += character ?? "";
-        }
-    }
-    if (inQuotes) throw new Error("This CSV has an unmatched quotation mark. Fix the quotation marks and try again.");
-    row.push(cell);
-    if (row.some((value)=>value !== "") || cell !== "") rows.push(row);
-    return rows;
-}
-function csvEscape(value, forceQuote = false) {
-    const source = cellToString(value);
-    return forceQuote || /[",\n\r\t]/.test(source) ? `"${source.replace(/"/g, '""')}"` : source;
-}
-function serializeCsv(rows, forceQuote = false) {
-    return rows.map((row)=>row.map((value)=>csvEscape(value, forceQuote)).join(",")).join("\r\n");
-}
-return { decodeUtf8, detectCsvDelimiter, csvToRows, csvEscape, serializeCsv };
-})();
-const __module4 = (() => {
-const { cellToString } = __module0;
-const HEADER_SCAN_LIMIT = 20;
-function uniqueHeaders(headerRow) {
-    const seen = new Map();
-    let generated = 0;
-    const headers = headerRow.map((value, index)=>{
-        const supplied = cellToString(value).trim();
-        const base = supplied || `Column ${index + 1}`;
-        if (!supplied) generated += 1;
-        const occurrence = (seen.get(base) ?? 0) + 1;
-        seen.set(base, occurrence);
-        return occurrence === 1 ? base : `${base} (${occurrence})`;
-    });
-    return {
-        headers,
-        generated
-    };
-}
-function prepareSheet(rawRows, headerIndex) {
-    const selectedHeader = rawRows[headerIndex];
-    if (!selectedHeader) throw new Error("Choose a valid header row.");
-    const dataRows = rawRows.slice(headerIndex + 1);
-    const width = Math.max(selectedHeader.length, ...dataRows.map((row)=>row.length));
-    if (width === 0) throw new Error("This worksheet does not contain any columns.");
-    const paddedHeader = Array.from({
-        length: width
-    }, (_, index)=>selectedHeader[index] ?? "");
-    const { headers, generated } = uniqueHeaders(paddedHeader);
-    const rows = dataRows.map((row)=>Array.from({
-            length: width
-        }, (_, index)=>row[index] ?? ""));
-    return {
-        headers,
-        rows,
-        generatedHeaderCount: generated
-    };
-}
-function rowPreview(row) {
-    return row.map(cellToString).map((value)=>value.trim()).filter(Boolean).slice(0, 3).join(" · ").slice(0, 54) || "Empty row";
-}
-function headerCandidates(rawRows) {
-    return rawRows.slice(0, HEADER_SCAN_LIMIT).map((row, index)=>({
-            index,
-            nonEmpty: row.filter((cell)=>cellToString(cell).trim()).length,
-            preview: rowPreview(row)
-        })).filter((candidate)=>candidate.nonEmpty > 0);
-}
-function findHeaderRow(rawRows) {
-    const candidates = headerCandidates(rawRows);
-    if (!candidates.length) throw new Error("This worksheet is empty.");
-    return candidates[0]?.index ?? 0;
-}
-function hasXlsxSignature(buffer) {
-    const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 4));
-    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && (bytes[2] === 0x03 && bytes[3] === 0x04 || bytes[2] === 0x05 && bytes[3] === 0x06 || bytes[2] === 0x07 && bytes[3] === 0x08);
-}
-return { HEADER_SCAN_LIMIT, uniqueHeaders, prepareSheet, rowPreview, headerCandidates, findHeaderRow, hasXlsxSignature };
-})();
-const __module5 = (() => {
 
-function requireXlsx(candidate) {
-    if (!candidate) throw new Error("Excel support is unavailable. Reload the page and try again.");
-    return candidate;
-}
-function readWorkbook(api, buffer) {
-    const workbook = api.read(buffer, {
-        type: "array",
-        cellDates: true,
-        dense: true
-    });
-    if (!workbook.SheetNames.length) throw new Error("This Excel file has no worksheets.");
-    return workbook;
-}
-function sheetRows(api, workbook, sheetName) {
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) throw new Error(`Worksheet “${sheetName}” could not be found.`);
-    return api.utils.sheet_to_json(sheet, {
-        header: 1,
-        defval: "",
-        raw: true
-    });
-}
-function writeWorkbook(api, rows) {
-    const workbook = api.utils.book_new();
-    const sheet = api.utils.aoa_to_sheet(rows);
-    api.utils.book_append_sheet(workbook, sheet, "Cleaned data");
-    const result = api.write(workbook, {
-        bookType: "xlsx",
-        type: "array"
-    });
-    if (result instanceof ArrayBuffer || Object.prototype.toString.call(result) === "[object ArrayBuffer]") {
-        return result.slice(0);
-    }
-    if (ArrayBuffer.isView(result)) {
-        return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
-    }
-    throw new Error("The Excel export returned an unsupported binary format.");
-}
-return { requireXlsx, readWorkbook, sheetRows, writeWorkbook };
-})();
-const __module6 = (() => {
-const { csvToRows, decodeUtf8, serializeCsv } = __module3;
-const { hasXlsxSignature } = __module4;
-const { normalizeError } = __module0;
-const { readWorkbook, requireXlsx, sheetRows, writeWorkbook } = __module5;
-const HOSTED_FILE_LIMIT_BYTES = 50 * 1024 * 1024;
-const LOCAL_FILE_LIMIT_BYTES = 10 * 1024 * 1024;
-class FileProcessor {
-    worker = null;
-    directWorkbook = null;
-    requestId = 0;
-    pending = new Map();
-    get supportsBackgroundProcessing() {
-        return window.location.protocol !== "file:" && "Worker" in window;
-    }
-    destroyWorker(error) {
-        this.worker?.terminate();
-        this.worker = null;
-        this.pending.forEach(({ reject, timer })=>{
-            window.clearTimeout(timer);
-            if (error) reject(error);
-        });
-        this.pending.clear();
-    }
-    ensureWorker() {
-        if (this.worker) return this.worker;
-        const worker = new Worker("xlsx-worker.js?v=1");
-        worker.addEventListener("message", (event)=>{
-            const pending = this.pending.get(event.data.id);
-            if (!pending) return;
-            this.pending.delete(event.data.id);
-            window.clearTimeout(pending.timer);
-            if (event.data.ok) pending.resolve(event.data);
-            else pending.reject(new Error(event.data.error));
-        });
-        worker.addEventListener("error", ()=>{
-            this.destroyWorker(new Error("Background processing could not start in this browser."));
-        });
-        this.worker = worker;
-        return worker;
-    }
-    callWorker(message, transfer = []) {
-        const worker = this.ensureWorker();
-        const id = ++this.requestId;
-        return new Promise((resolve, reject)=>{
-            const timer = window.setTimeout(()=>{
-                this.destroyWorker(new Error("Background processing took too long and was stopped."));
-            }, 30_000);
-            this.pending.set(id, {
-                resolve,
-                reject,
-                timer
-            });
-            worker.postMessage({
-                id,
-                ...message
-            }, transfer);
-        });
-    }
-    loadDirect(fileType, buffer) {
-        if (fileType === "csv") {
-            return {
-                rows: csvToRows(decodeUtf8(buffer)),
-                sheetNames: [],
-                activeSheet: null,
-                usedWorker: false
-            };
-        }
-        if (!hasXlsxSignature(buffer)) throw new Error("This file does not appear to be a valid .xlsx workbook.");
-        const api = requireXlsx(window.XLSX);
-        this.directWorkbook = readWorkbook(api, buffer);
-        const activeSheet = this.directWorkbook.SheetNames[0] ?? null;
-        if (!activeSheet) throw new Error("This Excel file has no worksheets.");
-        return {
-            rows: sheetRows(api, this.directWorkbook, activeSheet),
-            sheetNames: [
-                ...this.directWorkbook.SheetNames
-            ],
-            activeSheet,
-            usedWorker: false
-        };
-    }
-    async load(fileType, buffer) {
-        this.directWorkbook = null;
-        this.destroyWorker();
-        if (!this.supportsBackgroundProcessing) return this.loadDirect(fileType, buffer);
-        if (fileType === "xlsx" && !hasXlsxSignature(buffer)) {
-            throw new Error("This file does not appear to be a valid .xlsx workbook.");
-        }
-        const fallback = buffer.byteLength <= LOCAL_FILE_LIMIT_BYTES ? buffer.slice(0) : null;
-        try {
-            const response = await this.callWorker({
-                type: "parse",
-                fileType,
-                buffer
-            }, [
-                buffer
-            ]);
-            if (!response.ok || response.type !== "parse") throw new Error("The background processor returned an unexpected response.");
-            return {
-                rows: response.rows,
-                sheetNames: response.sheetNames,
-                activeSheet: response.activeSheet,
-                usedWorker: true
-            };
-        } catch (error) {
-            this.destroyWorker();
-            if (fallback) return this.loadDirect(fileType, fallback);
-            throw new Error(`${normalizeError(error)} Try a smaller file or reload the page.`);
-        }
-    }
-    async selectSheet(sheetName) {
-        if (this.worker) {
-            const response = await this.callWorker({
-                type: "sheet",
-                sheetName
-            });
-            if (!response.ok || response.type !== "sheet") throw new Error("The worksheet could not be loaded.");
-            return response.rows;
-        }
-        const api = requireXlsx(window.XLSX);
-        if (!this.directWorkbook) throw new Error("Choose the Excel file again before changing worksheets.");
-        return sheetRows(api, this.directWorkbook, sheetName);
-    }
-    async exportRows(format, rows, quoteAll = false) {
-        if (this.supportsBackgroundProcessing) {
-            try {
-                const response = await this.callWorker({
-                    type: "export",
-                    format,
-                    rows,
-                    quoteAll
-                });
-                if (!response.ok || response.type !== "export") throw new Error("The exported file could not be prepared.");
-                return {
-                    buffer: response.buffer,
-                    mime: response.mime,
-                    extension: response.extension
-                };
-            } catch  {
-                this.destroyWorker();
-            }
-        }
-        if (format === "xlsx") {
-            return {
-                buffer: writeWorkbook(requireXlsx(window.XLSX), rows),
-                mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                extension: "xlsx"
-            };
-        }
-        const buffer = new TextEncoder().encode(`\uFEFF${serializeCsv(rows, quoteAll)}`).buffer;
-        return {
-            buffer,
-            mime: "text/csv;charset=utf-8",
-            extension: "csv"
-        };
-    }
-    dispose() {
-        this.destroyWorker();
-        this.directWorkbook = null;
-    }
-}
-return { HOSTED_FILE_LIMIT_BYTES, LOCAL_FILE_LIMIT_BYTES, FileProcessor };
-})();
-const __module7 = (() => {
-const { cellToString } = __module0;
-const FORMULA_PREFIX = /^[\s\uFEFF]*[=+\-@\uFF1D\uFF0B\uFF0D\uFF20]/u;
-function isFormulaLike(value) {
-    return FORMULA_PREFIX.test(cellToString(value));
-}
-function dangerousFormulaCount(rows) {
-    return rows.reduce((total, row)=>total + row.filter(isFormulaLike).length, 0);
-}
-function makeSpreadsheetSafe(value) {
-    const source = cellToString(value);
-    return isFormulaLike(source) ? `'${source}` : source;
-}
-function safeRows(rows) {
-    return rows.map((row)=>row.map(makeSpreadsheetSafe));
-}
-return { isFormulaLike, dangerousFormulaCount, makeSpreadsheetSafe, safeRows };
-})();
-const __module8 = (() => {
-const { cleanRows, isEmail, issuesForOriginalRow } = __module2;
-const { parseDate } = __module1;
-const { FileProcessor, HOSTED_FILE_LIMIT_BYTES, LOCAL_FILE_LIMIT_BYTES } = __module6;
-const { dangerousFormulaCount, safeRows } = __module7;
-const { findHeaderRow, headerCandidates, prepareSheet } = __module4;
-const { cellToString, normalizeError } = __module0;
 const SAMPLE_HEADERS = [
     "Customer ID",
     "Full Name",
@@ -825,8 +452,737 @@ const SAMPLE_ROWS = [
         "Duplicate email"
     ]
 ];
-const THEME_STORAGE_KEY = "data-cleaner-theme";
+return { SAMPLE_HEADERS, SAMPLE_ROWS };
+})();
+const __module4 = (() => {
+const { cellToString } = __module0;
+const DATA_LIMITS = {
+    maxRows: 200_000,
+    maxColumns: 256,
+    maxCells: 2_000_000,
+    maxCellCharacters: 100_000,
+    maxSheets: 50
+};
+function dataLimitError(detail) {
+    return new Error(`${detail} Try a smaller or narrower table.`);
+}
+function assertCellLength(value, limits = DATA_LIMITS) {
+    if (cellToString(value).length > limits.maxCellCharacters) {
+        throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+    }
+}
+function assertSheetNames(sheetNames, limits = DATA_LIMITS) {
+    if (sheetNames.length > limits.maxSheets) {
+        throw dataLimitError(`This workbook contains more than ${limits.maxSheets.toLocaleString("en-US")} worksheets.`);
+    }
+}
+function assertTableLimits(rows, limits = DATA_LIMITS) {
+    if (rows.length > limits.maxRows) {
+        throw dataLimitError(`This table contains more than ${limits.maxRows.toLocaleString("en-US")} rows.`);
+    }
+    let cells = 0;
+    for (const row of rows){
+        if (row.length > limits.maxColumns) {
+            throw dataLimitError(`This table contains more than ${limits.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        cells += row.length;
+        if (cells > limits.maxCells) {
+            throw dataLimitError(`This table contains more than ${limits.maxCells.toLocaleString("en-US")} cells.`);
+        }
+        row.forEach((value)=>assertCellLength(value, limits));
+    }
+}
+return { DATA_LIMITS, dataLimitError, assertCellLength, assertSheetNames, assertTableLimits };
+})();
+const __module5 = (() => {
+const { DATA_LIMITS, dataLimitError } = __module4;
+const { cellToString } = __module0;
+const DELIMITERS = [
+    ",",
+    ";",
+    "\t"
+];
+function decodeUtf8(buffer) {
+    try {
+        return new TextDecoder("utf-8", {
+            fatal: true
+        }).decode(buffer).replace(/^\uFEFF/, "");
+    } catch  {
+        throw new Error("This CSV is not valid UTF-8. Save it as UTF-8 in your spreadsheet app and try again.");
+    }
+}
+function detectCsvDelimiter(text) {
+    const counts = new Map(DELIMITERS.map((delimiter)=>[
+            delimiter,
+            0
+        ]));
+    let inQuotes = false;
+    let lines = 0;
+    for(let index = 0; index < text.length && lines < 12; index += 1){
+        const character = text[index];
+        if (character === '"') {
+            if (inQuotes && text[index + 1] === '"') index += 1;
+            else inQuotes = !inQuotes;
+        } else if (!inQuotes && DELIMITERS.includes(character)) {
+            counts.set(character, (counts.get(character) ?? 0) + 1);
+        } else if (!inQuotes && (character === "\n" || character === "\r")) {
+            if (character === "\r" && text[index + 1] === "\n") index += 1;
+            lines += 1;
+        }
+    }
+    return [
+        ...counts.entries()
+    ].reduce((best, current)=>current[1] > best[1] ? current : best, [
+        ",",
+        0
+    ])[0];
+}
+function csvToRows(text, limits = DATA_LIMITS) {
+    const source = text.replace(/^\uFEFF/, "");
+    const delimiter = detectCsvDelimiter(source);
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let inQuotes = false;
+    let cellCount = 0;
+    const pushCell = ()=>{
+        if (cell.length > limits.maxCellCharacters) {
+            throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+        }
+        if (row.length >= limits.maxColumns) {
+            throw dataLimitError(`This table contains more than ${limits.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        cellCount += 1;
+        if (cellCount > limits.maxCells) {
+            throw dataLimitError(`This table contains more than ${limits.maxCells.toLocaleString("en-US")} cells.`);
+        }
+        row.push(cell);
+        cell = "";
+    };
+    const pushRow = ()=>{
+        if (rows.length >= limits.maxRows) {
+            throw dataLimitError(`This table contains more than ${limits.maxRows.toLocaleString("en-US")} rows.`);
+        }
+        rows.push(row);
+        row = [];
+    };
+    for(let index = 0; index < source.length; index += 1){
+        const character = source[index];
+        if (character === '"') {
+            if (inQuotes && source[index + 1] === '"') {
+                cell += '"';
+                index += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (character === delimiter && !inQuotes) {
+            pushCell();
+        } else if ((character === "\n" || character === "\r") && !inQuotes) {
+            if (character === "\r" && source[index + 1] === "\n") index += 1;
+            pushCell();
+            pushRow();
+        } else {
+            cell += character ?? "";
+            if (cell.length > limits.maxCellCharacters) {
+                throw dataLimitError(`A cell contains more than ${limits.maxCellCharacters.toLocaleString("en-US")} characters.`);
+            }
+        }
+    }
+    if (inQuotes) throw new Error("This CSV has an unmatched quotation mark. Fix the quotation marks and try again.");
+    const hasFinalRow = row.some((value)=>value !== "") || cell !== "";
+    if (hasFinalRow) {
+        pushCell();
+        pushRow();
+    }
+    return rows;
+}
+function csvEscape(value, forceQuote = false) {
+    const source = cellToString(value);
+    return forceQuote || /[",\n\r\t]/.test(source) ? `"${source.replace(/"/g, '""')}"` : source;
+}
+function serializeCsv(rows, forceQuote = false) {
+    return rows.map((row)=>row.map((value)=>csvEscape(value, forceQuote)).join(",")).join("\r\n");
+}
+return { decodeUtf8, detectCsvDelimiter, csvToRows, csvEscape, serializeCsv };
+})();
+const __module6 = (() => {
+const { cellToString } = __module0;
+const HEADER_SCAN_LIMIT = 20;
+function uniqueHeaders(headerRow) {
+    const seen = new Map();
+    let generated = 0;
+    const headers = headerRow.map((value, index)=>{
+        const supplied = cellToString(value).trim();
+        const base = supplied || `Column ${index + 1}`;
+        if (!supplied) generated += 1;
+        const occurrence = (seen.get(base) ?? 0) + 1;
+        seen.set(base, occurrence);
+        return occurrence === 1 ? base : `${base} (${occurrence})`;
+    });
+    return {
+        headers,
+        generated
+    };
+}
+function prepareSheet(rawRows, headerIndex) {
+    const selectedHeader = rawRows[headerIndex];
+    if (!selectedHeader) throw new Error("Choose a valid header row.");
+    const dataRows = rawRows.slice(headerIndex + 1);
+    const width = Math.max(selectedHeader.length, ...dataRows.map((row)=>row.length));
+    if (width === 0) throw new Error("This worksheet does not contain any columns.");
+    const paddedHeader = Array.from({
+        length: width
+    }, (_, index)=>selectedHeader[index] ?? "");
+    const { headers, generated } = uniqueHeaders(paddedHeader);
+    const rows = dataRows.map((row)=>Array.from({
+            length: width
+        }, (_, index)=>row[index] ?? ""));
+    return {
+        headers,
+        rows,
+        generatedHeaderCount: generated
+    };
+}
+function rowPreview(row) {
+    return row.map(cellToString).map((value)=>value.trim()).filter(Boolean).slice(0, 3).join(" · ").slice(0, 54) || "Empty row";
+}
+function headerCandidates(rawRows) {
+    return rawRows.slice(0, HEADER_SCAN_LIMIT).map((row, index)=>({
+            index,
+            nonEmpty: row.filter((cell)=>cellToString(cell).trim()).length,
+            preview: rowPreview(row)
+        })).filter((candidate)=>candidate.nonEmpty > 0);
+}
+function findHeaderRow(rawRows) {
+    const candidates = headerCandidates(rawRows);
+    if (!candidates.length) throw new Error("This worksheet is empty.");
+    return candidates[0]?.index ?? 0;
+}
+function hasXlsxSignature(buffer) {
+    const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 4));
+    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && (bytes[2] === 0x03 && bytes[3] === 0x04 || bytes[2] === 0x05 && bytes[3] === 0x06 || bytes[2] === 0x07 && bytes[3] === 0x08);
+}
+return { HEADER_SCAN_LIMIT, uniqueHeaders, prepareSheet, rowPreview, headerCandidates, findHeaderRow, hasXlsxSignature };
+})();
+const __module7 = (() => {
+const { assertSheetNames, assertTableLimits, DATA_LIMITS, dataLimitError } = __module4;
+function requireXlsx(candidate) {
+    if (!candidate) throw new Error("Excel support is unavailable. Reload the page and try again.");
+    return candidate;
+}
+function readWorkbook(api, buffer) {
+    const workbook = api.read(buffer, {
+        type: "array",
+        cellDates: true,
+        dense: true,
+        sheetRows: DATA_LIMITS.maxRows + 1
+    });
+    if (!workbook.SheetNames.length) throw new Error("This Excel file has no worksheets.");
+    assertSheetNames(workbook.SheetNames);
+    return workbook;
+}
+function sheetRows(api, workbook, sheetName) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) throw new Error(`Worksheet “${sheetName}” could not be found.`);
+    const range = typeof sheet === "object" && sheet !== null && "!ref" in sheet ? sheet["!ref"] : undefined;
+    if (typeof range === "string") {
+        const decoded = api.utils.decode_range(range);
+        const rows = decoded.e.r - decoded.s.r + 1;
+        const columns = decoded.e.c - decoded.s.c + 1;
+        if (rows > DATA_LIMITS.maxRows) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxRows.toLocaleString("en-US")} rows.`);
+        }
+        if (columns > DATA_LIMITS.maxColumns) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxColumns.toLocaleString("en-US")} columns.`);
+        }
+        if (rows * columns > DATA_LIMITS.maxCells) {
+            throw dataLimitError(`This worksheet contains more than ${DATA_LIMITS.maxCells.toLocaleString("en-US")} cells.`);
+        }
+    }
+    const rows = api.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: true
+    });
+    assertTableLimits(rows);
+    return rows;
+}
+function writeWorkbook(api, rows) {
+    assertTableLimits(rows);
+    const workbook = api.utils.book_new();
+    const sheet = api.utils.aoa_to_sheet(rows);
+    api.utils.book_append_sheet(workbook, sheet, "Cleaned data");
+    const result = api.write(workbook, {
+        bookType: "xlsx",
+        type: "array"
+    });
+    if (result instanceof ArrayBuffer || Object.prototype.toString.call(result) === "[object ArrayBuffer]") {
+        return result.slice(0);
+    }
+    if (ArrayBuffer.isView(result)) {
+        return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
+    }
+    throw new Error("The Excel export returned an unsupported binary format.");
+}
+return { requireXlsx, readWorkbook, sheetRows, writeWorkbook };
+})();
+const __module8 = (() => {
+const { csvToRows, decodeUtf8, serializeCsv } = __module5;
+const { hasXlsxSignature } = __module6;
+const { assertTableLimits } = __module4;
+const { normalizeError } = __module0;
+const { readWorkbook, requireXlsx, sheetRows, writeWorkbook } = __module7;
+const HOSTED_FILE_LIMIT_BYTES = 50 * 1024 * 1024;
+const LOCAL_FILE_LIMIT_BYTES = 10 * 1024 * 1024;
+const XLSX_SCRIPT_URL = "vendor/xlsx.full.min.js";
+let xlsxLoadPromise = null;
+function loadMainThreadXlsx() {
+    if (window.XLSX) return Promise.resolve(requireXlsx(window.XLSX));
+    if (xlsxLoadPromise) return xlsxLoadPromise;
+    const script = document.createElement("script");
+    script.src = XLSX_SCRIPT_URL;
+    script.async = true;
+    xlsxLoadPromise = new Promise((resolve, reject)=>{
+        script.addEventListener("load", ()=>{
+            try {
+                resolve(requireXlsx(window.XLSX));
+            } catch (error) {
+                reject(error);
+            }
+        }, {
+            once: true
+        });
+        script.addEventListener("error", ()=>{
+            reject(new Error("Excel support could not be loaded. Reload the page and try again."));
+        }, {
+            once: true
+        });
+    }).catch((error)=>{
+        xlsxLoadPromise = null;
+        script.remove();
+        throw error;
+    });
+    document.head.append(script);
+    return xlsxLoadPromise;
+}
+class FileProcessor {
+    worker = null;
+    directWorkbook = null;
+    requestId = 0;
+    pending = new Map();
+    get supportsBackgroundProcessing() {
+        return window.location.protocol !== "file:" && "Worker" in window;
+    }
+    destroyWorker(error = new Error("Background processing was stopped.")) {
+        this.worker?.terminate();
+        this.worker = null;
+        this.pending.forEach(({ reject, timer })=>{
+            window.clearTimeout(timer);
+            reject(error);
+        });
+        this.pending.clear();
+    }
+    ensureWorker() {
+        if (this.worker) return this.worker;
+        const worker = new Worker("xlsx-worker.js?v=2");
+        worker.addEventListener("message", (event)=>{
+            const pending = this.pending.get(event.data.id);
+            if (!pending) return;
+            this.pending.delete(event.data.id);
+            window.clearTimeout(pending.timer);
+            if (event.data.ok) pending.resolve(event.data);
+            else pending.reject(new Error(event.data.error));
+        });
+        worker.addEventListener("error", ()=>{
+            this.destroyWorker(new Error("Background processing could not start in this browser."));
+        });
+        this.worker = worker;
+        return worker;
+    }
+    callWorker(message, transfer = []) {
+        const worker = this.ensureWorker();
+        const id = ++this.requestId;
+        return new Promise((resolve, reject)=>{
+            const timer = window.setTimeout(()=>{
+                this.destroyWorker(new Error("Background processing took too long and was stopped."));
+            }, 30_000);
+            this.pending.set(id, {
+                resolve,
+                reject,
+                timer
+            });
+            try {
+                worker.postMessage({
+                    id,
+                    ...message
+                }, transfer);
+            } catch (error) {
+                window.clearTimeout(timer);
+                this.pending.delete(id);
+                reject(new Error(normalizeError(error)));
+            }
+        });
+    }
+    async loadDirect(fileType, buffer) {
+        if (fileType === "csv") {
+            return {
+                rows: csvToRows(decodeUtf8(buffer)),
+                sheetNames: [],
+                activeSheet: null,
+                usedWorker: false
+            };
+        }
+        if (!hasXlsxSignature(buffer)) throw new Error("This file does not appear to be a valid .xlsx workbook.");
+        const api = await loadMainThreadXlsx();
+        this.directWorkbook = readWorkbook(api, buffer);
+        const activeSheet = this.directWorkbook.SheetNames[0] ?? null;
+        if (!activeSheet) throw new Error("This Excel file has no worksheets.");
+        return {
+            rows: sheetRows(api, this.directWorkbook, activeSheet),
+            sheetNames: [
+                ...this.directWorkbook.SheetNames
+            ],
+            activeSheet,
+            usedWorker: false
+        };
+    }
+    async load(fileType, buffer) {
+        this.directWorkbook = null;
+        this.destroyWorker(new Error("A newer file replaced the previous operation."));
+        if (!this.supportsBackgroundProcessing) return this.loadDirect(fileType, buffer);
+        if (fileType === "xlsx" && !hasXlsxSignature(buffer)) {
+            throw new Error("This file does not appear to be a valid .xlsx workbook.");
+        }
+        try {
+            const response = await this.callWorker({
+                type: "parse",
+                fileType,
+                buffer
+            }, [
+                buffer
+            ]);
+            if (!response.ok || response.type !== "parse") throw new Error("The background processor returned an unexpected response.");
+            return {
+                rows: response.rows,
+                sheetNames: response.sheetNames,
+                activeSheet: response.activeSheet,
+                usedWorker: true
+            };
+        } catch (error) {
+            this.destroyWorker(new Error("Background processing failed and was stopped."));
+            throw new Error(`${normalizeError(error)} The file was not processed. Try a smaller file or reload the page.`);
+        }
+    }
+    async selectSheet(sheetName) {
+        if (this.worker) {
+            const response = await this.callWorker({
+                type: "sheet",
+                sheetName
+            });
+            if (!response.ok || response.type !== "sheet") throw new Error("The worksheet could not be loaded.");
+            return response.rows;
+        }
+        const api = await loadMainThreadXlsx();
+        if (!this.directWorkbook) throw new Error("Choose the Excel file again before changing worksheets.");
+        return sheetRows(api, this.directWorkbook, sheetName);
+    }
+    async exportRows(format, rows, quoteAll = false) {
+        assertTableLimits(rows);
+        if (this.supportsBackgroundProcessing) {
+            try {
+                const response = await this.callWorker({
+                    type: "export",
+                    format,
+                    rows,
+                    quoteAll
+                });
+                if (!response.ok || response.type !== "export") throw new Error("The exported file could not be prepared.");
+                return {
+                    buffer: response.buffer,
+                    mime: response.mime,
+                    extension: response.extension
+                };
+            } catch (error) {
+                this.destroyWorker(new Error("Background export failed and was stopped."));
+                throw new Error(`${normalizeError(error)} No file was downloaded.`);
+            }
+        }
+        if (format === "xlsx") {
+            const api = await loadMainThreadXlsx();
+            return {
+                buffer: writeWorkbook(api, rows),
+                mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                extension: "xlsx"
+            };
+        }
+        const buffer = new TextEncoder().encode(`\uFEFF${serializeCsv(rows, quoteAll)}`).buffer;
+        return {
+            buffer,
+            mime: "text/csv;charset=utf-8",
+            extension: "csv"
+        };
+    }
+    dispose() {
+        this.destroyWorker(new Error("The page was closed before background processing finished."));
+        this.directWorkbook = null;
+    }
+}
+return { HOSTED_FILE_LIMIT_BYTES, LOCAL_FILE_LIMIT_BYTES, FileProcessor };
+})();
+const __module9 = (() => {
+const { cellToString } = __module0;
+const FORMULA_PREFIX = /^[\s\uFEFF]*[=+\-@\uFF1D\uFF0B\uFF0D\uFF20]/u;
+function isFormulaLike(value) {
+    return FORMULA_PREFIX.test(cellToString(value));
+}
+function dangerousFormulaCount(rows) {
+    return rows.reduce((total, row)=>total + row.filter(isFormulaLike).length, 0);
+}
+function makeSpreadsheetSafe(value) {
+    const source = cellToString(value);
+    return isFormulaLike(source) ? `'${source}` : source;
+}
+function safeRows(rows) {
+    return rows.map((row)=>row.map(makeSpreadsheetSafe));
+}
+return { isFormulaLike, dangerousFormulaCount, makeSpreadsheetSafe, safeRows };
+})();
+const __module10 = (() => {
+const { cellToString } = __module0;
 const VIRTUAL_ROW_BUFFER = 12;
+const virtualTables = new WeakMap();
+function insertPlainText(editor, text) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) {
+        editor.textContent = `${editor.textContent ?? ""}${text}`;
+        return;
+    }
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+function makeEditableCell(value, entry, columnIndex, options) {
+    const editor = document.createElement("span");
+    editor.className = "cell-editor";
+    editor.contentEditable = "true";
+    editor.spellcheck = false;
+    editor.setAttribute("role", "textbox");
+    editor.tabIndex = 0;
+    editor.setAttribute("aria-label", `Edit row ${entry.sourceIndex + 1}, ${options.headers[columnIndex] ?? `Column ${columnIndex + 1}`}`);
+    editor.textContent = value;
+    editor.addEventListener("keydown", (event)=>{
+        if (event.key === "Enter") {
+            event.preventDefault();
+            editor.blur();
+        } else if (event.key === "Escape") {
+            event.preventDefault();
+            editor.textContent = value;
+            editor.blur();
+        }
+    });
+    editor.addEventListener("paste", (event)=>{
+        event.preventDefault();
+        insertPlainText(editor, event.clipboardData?.getData("text/plain") ?? "");
+    });
+    editor.addEventListener("blur", ()=>{
+        const nextValue = cellToString(editor.textContent).replace(/[\r\n]+/g, " ");
+        if (nextValue !== value && !options.onEdit(entry.sourceIndex, columnIndex, nextValue)) {
+            editor.textContent = value;
+        }
+    });
+    return editor;
+}
+function createTableHeader(headers) {
+    const head = document.createElement("thead");
+    const row = document.createElement("tr");
+    const number = document.createElement("th");
+    number.scope = "col";
+    number.textContent = "#";
+    row.append(number);
+    headers.forEach((header)=>{
+        const cell = document.createElement("th");
+        cell.scope = "col";
+        cell.textContent = header;
+        row.append(cell);
+    });
+    head.append(row);
+    return head;
+}
+function isCleanedRow(entry) {
+    return !Array.isArray(entry);
+}
+function createDataRow(entry, visibleIndex, options) {
+    const cleaned = isCleanedRow(entry);
+    const values = cleaned ? entry.values : entry;
+    const sourceIndex = cleaned ? entry.sourceIndex : visibleIndex;
+    const issues = cleaned ? entry.issues : options.originalIssues(entry);
+    const row = document.createElement("tr");
+    row.setAttribute("aria-rowindex", String(visibleIndex + 2));
+    const number = document.createElement("td");
+    number.textContent = String(sourceIndex + 1);
+    row.append(number);
+    values.forEach((value, columnIndex)=>{
+        const cell = document.createElement("td");
+        const display = cellToString(value);
+        if (options.kind === "after" && cleaned) {
+            cell.append(makeEditableCell(display, entry, columnIndex, options));
+        } else {
+            cell.textContent = display || "—";
+        }
+        const issueText = issues[columnIndex];
+        if (issueText) {
+            cell.classList.add("warning");
+            const issue = document.createElement("span");
+            issue.className = "issue";
+            issue.textContent = issueText;
+            cell.append(issue);
+        } else if (options.kind === "after" && cleaned && entry.changed) {
+            cell.classList.add("changed");
+        }
+        row.append(cell);
+    });
+    return row;
+}
+function tableRowHeight() {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--table-row-height");
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 34;
+}
+function createSpacerRow(height, columnCount) {
+    const spacer = document.createElement("tr");
+    spacer.className = "virtual-spacer";
+    const cell = document.createElement("td");
+    cell.colSpan = columnCount + 1;
+    cell.style.height = `${height}px`;
+    spacer.append(cell);
+    return spacer;
+}
+function renderTable(table, options) {
+    const scroll = table.closest(".table-scroll");
+    if (!scroll) throw new Error("A data table is missing its scroll container.");
+    const previous = virtualTables.get(table);
+    if (previous) {
+        scroll.removeEventListener("scroll", previous.handleScroll);
+        previous.observer?.disconnect();
+        if (previous.frame) window.cancelAnimationFrame(previous.frame);
+    }
+    table.replaceChildren(createTableHeader(options.headers));
+    table.setAttribute("aria-rowcount", String(options.rows.length + 1));
+    table.setAttribute("aria-colcount", String(options.headers.length + 1));
+    const controller = {
+        frame: 0,
+        handleScroll: ()=>undefined,
+        observer: null
+    };
+    const renderVisibleRows = ()=>{
+        const rowHeight = tableRowHeight();
+        const viewportHeight = scroll.clientHeight || 400;
+        const maximumScroll = Math.max(0, (options.rows.length + 1) * rowHeight - viewportHeight);
+        if (scroll.scrollTop > maximumScroll) scroll.scrollTop = maximumScroll;
+        const bodyScrollTop = Math.max(0, scroll.scrollTop - rowHeight);
+        const firstVisible = Math.floor(bodyScrollTop / rowHeight);
+        const visibleRows = Math.ceil(viewportHeight / rowHeight);
+        const start = Math.max(0, firstVisible - VIRTUAL_ROW_BUFFER);
+        const end = Math.min(options.rows.length, firstVisible + visibleRows + VIRTUAL_ROW_BUFFER);
+        const body = document.createElement("tbody");
+        if (start > 0) body.append(createSpacerRow(start * rowHeight, options.headers.length));
+        options.rows.slice(start, end).forEach((entry, index)=>{
+            body.append(createDataRow(entry, start + index, options));
+        });
+        if (end < options.rows.length) {
+            body.append(createSpacerRow((options.rows.length - end) * rowHeight, options.headers.length));
+        }
+        table.tBodies[0]?.replaceWith(body);
+        if (!table.tBodies[0]) table.append(body);
+    };
+    controller.handleScroll = ()=>{
+        if (controller.frame) return;
+        controller.frame = window.requestAnimationFrame(()=>{
+            controller.frame = 0;
+            renderVisibleRows();
+        });
+    };
+    if ("ResizeObserver" in window) {
+        controller.observer = new ResizeObserver(controller.handleScroll);
+        controller.observer.observe(scroll);
+    }
+    virtualTables.set(table, controller);
+    scroll.addEventListener("scroll", controller.handleScroll, {
+        passive: true
+    });
+    renderVisibleRows();
+}
+return { renderTable };
+})();
+const __module11 = (() => {
+
+const THEME_STORAGE_KEY = "data-cleaner-theme";
+function savedTheme() {
+    try {
+        const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
+        return theme === "dark" || theme === "light" ? theme : null;
+    } catch  {
+        return null;
+    }
+}
+function systemTheme() {
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function createThemeController(elements, announce) {
+    const preference = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const apply = (theme, options = {})=>{
+        document.documentElement.dataset.theme = theme;
+        const isDark = theme === "dark";
+        const nextAction = isDark ? "light" : "dark";
+        elements.toggle.setAttribute("aria-pressed", String(isDark));
+        elements.toggle.setAttribute("aria-label", `Switch to ${nextAction} theme`);
+        elements.toggle.title = `Switch to ${nextAction} theme`;
+        elements.label.textContent = isDark ? "Light" : "Dark";
+        if (options.save) {
+            try {
+                window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+            } catch  {}
+        }
+        if (options.announceChange) announce(`${isDark ? "Dark" : "Light"} theme enabled.`);
+    };
+    const onSystemThemeChange = (event)=>{
+        if (!savedTheme()) apply(event.matches ? "dark" : "light");
+    };
+    return {
+        initialize () {
+            const initial = document.documentElement.dataset.theme;
+            apply(initial === "dark" || initial === "light" ? initial : savedTheme() ?? systemTheme());
+            preference?.addEventListener("change", onSystemThemeChange);
+        },
+        toggle () {
+            apply(document.documentElement.dataset.theme === "dark" ? "light" : "dark", {
+                save: true,
+                announceChange: true
+            });
+        },
+        dispose () {
+            preference?.removeEventListener("change", onSystemThemeChange);
+        }
+    };
+}
+return { createThemeController };
+})();
+const __module12 = (() => {
+const { cleanRows, isEmail, issuesForOriginalRow } = __module2;
+const { SAMPLE_HEADERS, SAMPLE_ROWS } = __module3;
+const { parseDate } = __module1;
+const { FileProcessor, HOSTED_FILE_LIMIT_BYTES, LOCAL_FILE_LIMIT_BYTES } = __module8;
+const { assertCellLength } = __module4;
+const { dangerousFormulaCount, safeRows } = __module9;
+const { findHeaderRow, headerCandidates, prepareSheet } = __module6;
+const { renderTable } = __module10;
+const { createThemeController } = __module11;
+const { cellToString, normalizeError } = __module0;
 const DATE_HEADER_HINT = /\b(date|day|time|created|updated|due|deadline|start|end|birth|birthday|dob|joined)\b/i;
 const EMAIL_HEADER_HINT = /\be-?mail\b/i;
 const DEDUP_HEADER_HINT = /\b(e-?mail|id|identifier|code|reference|number)\b/i;
@@ -911,7 +1267,6 @@ const state = {
     manualEdits: new Map(),
     processing: false
 };
-const virtualTables = new WeakMap();
 const processor = new FileProcessor();
 function announce(message) {
     els.announcer.textContent = "";
@@ -919,40 +1274,10 @@ function announce(message) {
         els.announcer.textContent = message;
     }, 25);
 }
-function savedTheme() {
-    try {
-        const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
-        return theme === "dark" || theme === "light" ? theme : null;
-    } catch  {
-        return null;
-    }
-}
-function systemTheme() {
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-function applyTheme(theme, options = {}) {
-    const nextTheme = theme === "dark" ? "dark" : "light";
-    document.documentElement.dataset.theme = nextTheme;
-    const isDark = nextTheme === "dark";
-    const nextAction = isDark ? "light" : "dark";
-    els.themeToggle.setAttribute("aria-pressed", String(isDark));
-    els.themeToggle.setAttribute("aria-label", `Switch to ${nextAction} theme`);
-    els.themeToggle.title = `Switch to ${nextAction} theme`;
-    els.themeToggleLabel.textContent = isDark ? "Light" : "Dark";
-    if (options.save) {
-        try {
-            window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-        } catch  {}
-    }
-    if (options.announceChange) announce(`${isDark ? "Dark" : "Light"} theme enabled.`);
-}
-function initializeTheme() {
-    applyTheme(document.documentElement.dataset.theme ?? savedTheme() ?? systemTheme());
-    const preference = window.matchMedia?.("(prefers-color-scheme: dark)");
-    preference?.addEventListener("change", (event)=>{
-        if (!savedTheme()) applyTheme(event.matches ? "dark" : "light");
-    });
-}
+const themeController = createThemeController({
+    toggle: els.themeToggle,
+    label: els.themeToggleLabel
+}, announce);
 function fileSizeLabel(bytes) {
     if (bytes === null) return "Demo data";
     if (bytes < 1024) return `${bytes} B`;
@@ -1130,184 +1455,43 @@ function renderInsights(result, settings) {
     els.insights.replaceChildren(...insights);
     els.insights.hidden = insights.length === 0;
 }
-function commitManualEdit(editor) {
-    const sourceIndex = Number(editor.dataset.sourceIndex);
-    const columnIndex = Number(editor.dataset.columnIndex);
-    const nextValue = cellToString(editor.textContent).replace(/[\r\n]+/g, " ");
-    const savedValue = editor.dataset.savedValue ?? "";
-    if (nextValue === savedValue) return;
-    const original = cellToString(state.rows[sourceIndex]?.[columnIndex]);
-    const key = `${sourceIndex}:${columnIndex}`;
-    if (nextValue === original) state.manualEdits.delete(key);
-    else state.manualEdits.set(key, nextValue);
-    updateUI({
-        announceChange: true
-    });
-}
-function insertPlainText(editor, text) {
-    const selection = window.getSelection();
-    if (!selection?.rangeCount) {
-        editor.textContent = `${editor.textContent ?? ""}${text}`;
-        return;
-    }
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    const node = document.createTextNode(text);
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-}
-function makeEditableCell(value, entry, columnIndex) {
-    const editor = document.createElement("span");
-    editor.className = "cell-editor";
-    editor.contentEditable = "true";
-    editor.spellcheck = false;
-    editor.setAttribute("role", "textbox");
-    editor.tabIndex = 0;
-    editor.dataset.sourceIndex = String(entry.sourceIndex);
-    editor.dataset.columnIndex = String(columnIndex);
-    editor.dataset.savedValue = value;
-    editor.setAttribute("aria-label", `Edit row ${entry.sourceIndex + 1}, ${state.headers[columnIndex] ?? `Column ${columnIndex + 1}`}`);
-    editor.textContent = value;
-    editor.addEventListener("keydown", (event)=>{
-        if (event.key === "Enter") {
-            event.preventDefault();
-            editor.blur();
-        } else if (event.key === "Escape") {
-            event.preventDefault();
-            editor.textContent = editor.dataset.savedValue ?? "";
-            editor.blur();
-        }
-    });
-    editor.addEventListener("paste", (event)=>{
-        event.preventDefault();
-        insertPlainText(editor, event.clipboardData?.getData("text/plain") ?? "");
-    });
-    editor.addEventListener("blur", ()=>commitManualEdit(editor));
-    return editor;
-}
-function createTableHeader() {
-    const head = document.createElement("thead");
-    const row = document.createElement("tr");
-    const number = document.createElement("th");
-    number.scope = "col";
-    number.textContent = "#";
-    row.append(number);
-    state.headers.forEach((header)=>{
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = header;
-        row.append(th);
-    });
-    head.append(row);
-    return head;
-}
-function isCleanedRow(entry) {
-    return !Array.isArray(entry);
-}
-function createDataRow(entry, visibleIndex, kind) {
-    const cleaned = isCleanedRow(entry);
-    const values = cleaned ? entry.values : entry;
-    const sourceIndex = cleaned ? entry.sourceIndex : visibleIndex;
-    const issues = cleaned ? entry.issues : issuesForOriginalRow(entry, state.headers, getSettings());
-    const changed = cleaned && entry.changed;
-    const row = document.createElement("tr");
-    row.setAttribute("aria-rowindex", String(visibleIndex + 2));
-    const number = document.createElement("td");
-    number.textContent = String(sourceIndex + 1);
-    row.append(number);
-    values.forEach((value, columnIndex)=>{
-        const td = document.createElement("td");
-        const display = cellToString(value);
-        if (kind === "after" && cleaned) td.append(makeEditableCell(display, entry, columnIndex));
-        else td.textContent = display || "—";
-        const issueText = issues[columnIndex];
-        if (issueText) {
-            td.classList.add("warning");
-            const issue = document.createElement("span");
-            issue.className = "issue";
-            issue.textContent = issueText;
-            td.append(issue);
-        } else if (kind === "after" && changed) {
-            td.classList.add("changed");
-        }
-        row.append(td);
-    });
-    return row;
-}
-function tableRowHeight() {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--table-row-height");
-    const parsed = Number.parseFloat(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 34;
-}
-function createSpacerRow(height) {
-    const spacer = document.createElement("tr");
-    spacer.className = "virtual-spacer";
-    const cell = document.createElement("td");
-    cell.colSpan = state.headers.length + 1;
-    cell.style.height = `${height}px`;
-    spacer.append(cell);
-    return spacer;
-}
-function createTable(table, rows, kind) {
-    const scroll = table.closest(".table-scroll");
-    if (!scroll) throw new Error("A data table is missing its scroll container.");
-    const previous = virtualTables.get(table);
-    if (previous) {
-        scroll.removeEventListener("scroll", previous.handleScroll);
-        previous.observer?.disconnect();
-        if (previous.frame) window.cancelAnimationFrame(previous.frame);
-    }
-    table.replaceChildren(createTableHeader());
-    table.setAttribute("aria-rowcount", String(rows.length + 1));
-    const controller = {
-        frame: 0,
-        handleScroll: ()=>undefined,
-        observer: null
-    };
-    const renderVisibleRows = ()=>{
-        const rowHeight = tableRowHeight();
-        const viewportHeight = scroll.clientHeight || 400;
-        const maximumScroll = Math.max(0, (rows.length + 1) * rowHeight - viewportHeight);
-        if (scroll.scrollTop > maximumScroll) scroll.scrollTop = maximumScroll;
-        const bodyScrollTop = Math.max(0, scroll.scrollTop - rowHeight);
-        const firstVisible = Math.floor(bodyScrollTop / rowHeight);
-        const visibleRows = Math.ceil(viewportHeight / rowHeight);
-        const start = Math.max(0, firstVisible - VIRTUAL_ROW_BUFFER);
-        const end = Math.min(rows.length, firstVisible + visibleRows + VIRTUAL_ROW_BUFFER);
-        const body = document.createElement("tbody");
-        if (start > 0) body.append(createSpacerRow(start * rowHeight));
-        rows.slice(start, end).forEach((entry, index)=>body.append(createDataRow(entry, start + index, kind)));
-        if (end < rows.length) body.append(createSpacerRow((rows.length - end) * rowHeight));
-        table.tBodies[0]?.replaceWith(body);
-        if (!table.tBodies[0]) table.append(body);
-    };
-    controller.handleScroll = ()=>{
-        if (controller.frame) return;
-        controller.frame = window.requestAnimationFrame(()=>{
-            controller.frame = 0;
-            renderVisibleRows();
+function commitManualEdit(sourceIndex, columnIndex, nextValue) {
+    try {
+        assertCellLength(nextValue);
+        const original = cellToString(state.rows[sourceIndex]?.[columnIndex]);
+        const key = `${sourceIndex}:${columnIndex}`;
+        if (nextValue === original) state.manualEdits.delete(key);
+        else state.manualEdits.set(key, nextValue);
+        clearFileError();
+        updateUI({
+            announceChange: true
         });
-    };
-    if ("ResizeObserver" in window) {
-        controller.observer = new ResizeObserver(controller.handleScroll);
-        controller.observer.observe(scroll);
+        return true;
+    } catch (error) {
+        showFileError(normalizeError(error));
+        return false;
     }
-    virtualTables.set(table, controller);
-    scroll.addEventListener("scroll", controller.handleScroll, {
-        passive: true
-    });
-    renderVisibleRows();
 }
 function updateUI(options = {}) {
     syncDateSettings();
     const settings = getSettings();
     const result = cleanRows(state.headers, state.rows, settings, state.manualEdits);
     state.output = result.output;
-    createTable(els.beforeTable, state.rows, "before");
-    createTable(els.afterTable, result.output, "after");
+    const tableOptions = {
+        headers: state.headers,
+        originalIssues: (row)=>issuesForOriginalRow(row, state.headers, settings),
+        onEdit: commitManualEdit
+    };
+    renderTable(els.beforeTable, {
+        ...tableOptions,
+        rows: state.rows,
+        kind: "before"
+    });
+    renderTable(els.afterTable, {
+        ...tableOptions,
+        rows: result.output,
+        kind: "after"
+    });
     els.beforeCount.textContent = `${state.rows.length} rows`;
     els.afterCount.textContent = `${result.output.length} rows`;
     els.changedCount.textContent = String(result.summary.changedRows);
@@ -1497,12 +1681,7 @@ function handleFile(file) {
     });
 }
 function bindEvents() {
-    els.themeToggle.addEventListener("click", ()=>{
-        applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", {
-            save: true,
-            announceChange: true
-        });
-    });
+    els.themeToggle.addEventListener("click", themeController.toggle);
     els.fileDrop.addEventListener("click", ()=>els.fileInput.click());
     els.fileInput.addEventListener("change", ()=>handleFile(els.fileInput.files?.[0]));
     [
@@ -1571,14 +1750,17 @@ function bindEvents() {
         });
         if (els.formulaDialog.returnValue === "original") void downloadCleaned();
     });
-    window.addEventListener("beforeunload", ()=>processor.dispose(), {
+    window.addEventListener("beforeunload", ()=>{
+        themeController.dispose();
+        processor.dispose();
+    }, {
         once: true
     });
 }
 function initialize() {
     els.fileLimit.textContent = processor.supportsBackgroundProcessing ? "Files up to 50 MB are processed in the background. Larger files may take longer." : "Direct-open mode supports files up to 10 MB. Use the GitHub Pages version for files up to 50 MB.";
     populateHeaderRows(state.rawRows, 0);
-    initializeTheme();
+    themeController.initialize();
     configureColumns({
         resetRules: true
     });

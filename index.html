@@ -4,23 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="A local, browser-based CSV and Excel data cleaning demo." />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' file:; style-src 'self' file:; style-src-elem 'self' file:; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>Data Cleaner — local CSV & Excel cleanup</title>
-    <script>
-      (() => {
-        try {
-          const savedTheme = localStorage.getItem("data-cleaner-theme");
-          const theme = savedTheme === "dark" || savedTheme === "light"
-            ? savedTheme
-            : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-          document.documentElement.dataset.theme = theme;
-        } catch {
-          // Keep the light theme when browser storage or media queries are unavailable.
-        }
-      })();
-    </script>
+    <script src="theme-boot.js"></script>
     <link rel="stylesheet" href="styles.css" />
-    <script defer src="vendor/xlsx.full.min.js"></script>
-    <script defer src="app.js?v=4"></script>
+    <script defer src="app.js?v=5"></script>
   </head>
   <body>
     <main class="app-shell" aria-label="Data Cleaner">
@@ -116,12 +104,14 @@
 
         <section class="insights-panel" id="insightsPanel" aria-label="Data checks" hidden></section>
 
+        <p class="sr-only" id="tableKeyboardHelp">Focus a table and use the arrow, Page Up, or Page Down keys to browse hidden rows and columns.</p>
+
         <section class="r-before-heading table-heading before-heading" aria-labelledby="beforeTitle">
           <div><h2 id="beforeTitle">Before</h2><span>Original data</span></div>
           <p id="beforeCount">0 rows</p>
         </section>
         <section class="r-before-table table-region before-region" aria-label="Original data">
-          <div class="table-scroll"><table id="beforeTable"></table></div>
+          <div class="table-scroll" role="region" tabindex="0" aria-labelledby="beforeTitle" aria-describedby="tableKeyboardHelp"><table id="beforeTable"></table></div>
         </section>
 
         <section class="r-after-heading table-heading after-heading" aria-labelledby="afterTitle">
@@ -129,7 +119,7 @@
           <p id="afterCount">0 rows</p>
         </section>
         <section class="r-after-table table-region after-region" aria-label="Cleaned data">
-          <div class="table-scroll"><table id="afterTable"></table></div>
+          <div class="table-scroll" role="region" tabindex="0" aria-labelledby="afterTitle" aria-describedby="tableKeyboardHelp"><table id="afterTable"></table></div>
         </section>
 
         <footer class="results-panel">

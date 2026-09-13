@@ -3,14 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "node scripts/build.mjs --check",
-    "test": "node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs",
+    "build:check": "node scripts/build.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/file-processor.test.mjs tests/xlsx.test.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "node scripts/build.mjs --check && node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/xlsx.test.mjs && node scripts/build.mjs && node scripts/audit.mjs"
+    "check": "pnpm typecheck && pnpm build:check && pnpm test && pnpm build && pnpm audit"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
   }
 }
