@@ -257,6 +257,13 @@ td .issue { display: inline-block; margin-left: 5px; color: var(--amber); font-s
 @keyframes ready-pulse { 0% { box-shadow: 0 0 0 0 rgba(13, 106, 248, .35); } 70% { box-shadow: 0 0 0 12px rgba(13, 106, 248, 0); } 100% { box-shadow: 0 6px 12px rgba(13, 106, 248, .19); } }
 @keyframes processing-spin { to { transform: rotate(360deg); } }
 
+@media (min-width: 1281px) and (max-width: 1500px) {
+  .comp-frame { grid-template-columns: minmax(300px, .75fr) minmax(0, 1.25fr); }
+  .topbar { column-gap: clamp(16px, 1.6vw, 24px); }
+  .controls-row { grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; }
+  .rules-panel { grid-template-columns: 180px minmax(0, 1fr); }
+}
+
 @media (max-width: 1280px) {
   .comp-frame { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "file" "controls" "rules" "insights" "before-heading" "before-table" "after-heading" "after-table" "results"; }
   .topbar { grid-template-columns: auto 1fr auto; grid-template-areas: "brand privacy theme" "tagline processing processing"; }
