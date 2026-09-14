@@ -50,7 +50,7 @@ The check performs strict TypeScript analysis, validates both browser bundles, r
 1. Run `pnpm check` locally.
 2. Preview through a local HTTP server and verify desktop and mobile layouts, keyboard scrolling, dark mode, CSV parsing, Excel parsing, manual editing, warnings, and both export formats.
 3. Review the complete change set and confirm that no real client data, credentials, or temporary files are included.
-4. Publish the reviewed static files to the default branch used by GitHub Pages.
-5. Wait for the Pages workflow to finish, then reopen the public URL and repeat the worker harness smoke test.
+4. Publish the reviewed static files to the default branch. GitHub Pages must use **GitHub Actions** as its source; `.github/workflows/pages.yml` packages and deploys the static site with Node.js 24-compatible actions.
+5. Wait for both the Quality and Deploy GitHub Pages workflows to finish, then reopen the public URL and repeat the worker harness smoke test.
 
 To roll back, restore the last reviewed versions of the static files and source modules together. Do not roll back only `app.js` or `xlsx-worker.js`, because the committed bundles and TypeScript source must describe the same release.
