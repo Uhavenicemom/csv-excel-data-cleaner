@@ -44,6 +44,7 @@ export interface CleaningSummary {
   emptyRows: number;
   duplicateRows: number;
   invalidEmails: number;
+  possibleEmailTypos: number;
   invalidDates: number;
   normalizedDates: number;
 }
@@ -51,6 +52,7 @@ export interface CleaningSummary {
 export interface Diagnostics {
   duplicateValues: number;
   invalidEmails: number;
+  possibleEmailTypos: number;
   invalidDates: number;
 }
 

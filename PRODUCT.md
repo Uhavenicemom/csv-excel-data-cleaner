@@ -36,6 +36,7 @@ The visitor chooses a `.csv` or `.xlsx` file. GitHub Pages mode accepts up to 50
 - Offer worksheet selection for XLSX files.
 - Offer opt-in removal of blank rows, whitespace trimming, and duplicate removal by a suggested relevant column. Duplicate removal is off by default.
 - Show compact in-product notices when duplicates or invalid values are found, with an action to enable the applicable rule.
+- Flag unambiguous, close email-domain typos for common international providers separately from invalid syntax; let the visitor use the suggestion or keep the original address without automatic correction or mailbox-verification claims.
 - Let the user choose from relevant email and date columns, edit any cleaned cell before export, and normalize dates to DD-MM-YY, MM-DD-YY, or YY-MM-DD. The output date format is separate from the chosen order for ambiguous numeric input dates; ISO and text dates are recognized independently. Invalid values remain flagged rather than silently deleted.
 - Preserve wider data rows by generating `Column N` headers instead of silently dropping cells.
 - Export the cleaned selected sheet as CSV or XLSX.

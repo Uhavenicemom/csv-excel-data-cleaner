@@ -1,6 +1,7 @@
 import { cleanRows, isEmail, issuesForOriginalRow } from "./cleaning.ts";
 import { SAMPLE_HEADERS, SAMPLE_ROWS } from "./demo-data.ts";
 import { parseDate } from "./dates.ts";
+import { emailCellKey } from "./email-domains.ts";
 import { FileProcessor, HOSTED_FILE_LIMIT_BYTES, LOCAL_FILE_LIMIT_BYTES } from "./file-processor.ts";
 import { assertCellLength } from "./limits.ts";
 import { dangerousFormulaCount, safeRows } from "./security.ts";
@@ -78,7 +79,9 @@ const els = {
   downloadMeta: required<HTMLElement>("#downloadMeta"),
   announcer: required<HTMLElement>("#announcer"),
   formulaDialog: required<HTMLDialogElement>("#formulaDialog"),
-  formulaDialogCopy: required<HTMLElement>("#formulaDialogCopy")
+  formulaDialogCopy: required<HTMLElement>("#formulaDialogCopy"),
+  emailTypoDialog: required<HTMLDialogElement>("#emailTypoDialog"),
+  emailTypoDialogCopy: required<HTMLElement>("#emailTypoDialogCopy")
 };
 
 interface AppState {
@@ -92,6 +95,7 @@ interface AppState {
   generatedHeaderCount: number;
   output: CleanedRow[];
   manualEdits: Map<string, string>;
+  dismissedEmailTypos: Map<string, string>;
   processing: boolean;
 }
 
@@ -106,10 +110,20 @@ const state: AppState = {
   generatedHeaderCount: 0,
   output: [],
   manualEdits: new Map(),
+  dismissedEmailTypos: new Map(),
   processing: false
 };
 
 const processor = new FileProcessor();
+
+interface PendingEmailSuggestion {
+  sourceIndex: number;
+  columnIndex: number;
+  originalEmail: string;
+  correctedEmail: string;
+}
+
+let pendingEmailSuggestion: PendingEmailSuggestion | null = null;
 
 function announce(message: string): void {
   els.announcer.textContent = "";
@@ -305,6 +319,17 @@ function renderInsights(result: CleaningResult, settings: CleaningSettings): voi
       }
     }));
   }
+  if (result.diagnostics.possibleEmailTypos > 0) {
+    const count = result.diagnostics.possibleEmailTypos;
+    insights.push(createInsight(`${count} possible email ${count === 1 ? "domain typo" : "domain typos"} to review.`, {
+      tone: "warning",
+      actionLabel: settings.validateEmail ? undefined : "Enable email check",
+      onAction: settings.validateEmail ? undefined : () => {
+        els.validateEmail.checked = true;
+        updateUI({ announceChange: true });
+      }
+    }));
+  }
   if (result.diagnostics.invalidDates > 0) {
     const count = result.diagnostics.invalidDates;
     insights.push(createInsight(`${count} ${count === 1 ? "date needs" : "dates need"} review.`, {
@@ -325,6 +350,7 @@ function commitManualEdit(sourceIndex: number, columnIndex: number, nextValue: s
     assertCellLength(nextValue);
     const original = cellToString(state.rows[sourceIndex]?.[columnIndex]);
     const key = `${sourceIndex}:${columnIndex}`;
+    state.dismissedEmailTypos.delete(key);
     if (nextValue === original) state.manualEdits.delete(key);
     else state.manualEdits.set(key, nextValue);
     clearFileError();
@@ -336,15 +362,51 @@ function commitManualEdit(sourceIndex: number, columnIndex: number, nextValue: s
   }
 }
 
+function reviewEmailSuggestion(
+  sourceIndex: number,
+  columnIndex: number,
+  originalEmail: string,
+  correctedEmail: string
+): void {
+  if (state.processing) return;
+  pendingEmailSuggestion = { sourceIndex, columnIndex, originalEmail, correctedEmail };
+  els.emailTypoDialogCopy.textContent = `Keep ${originalEmail}, or use ${correctedEmail}. This is a suggestion, not a confirmed error.`;
+  els.emailTypoDialog.returnValue = "";
+  els.emailTypoDialog.showModal();
+}
+
+function finishEmailSuggestionReview(): void {
+  const pending = pendingEmailSuggestion;
+  pendingEmailSuggestion = null;
+  if (!pending) return;
+  if (els.emailTypoDialog.returnValue === "use") {
+    if (commitManualEdit(pending.sourceIndex, pending.columnIndex, pending.correctedEmail)) {
+      announce(`Email changed to ${pending.correctedEmail}.`);
+      els.afterTable.closest<HTMLElement>(".table-scroll")?.focus();
+    }
+  } else if (els.emailTypoDialog.returnValue === "keep") {
+    state.dismissedEmailTypos.set(
+      emailCellKey(pending.sourceIndex, pending.columnIndex),
+      pending.originalEmail.toLowerCase()
+    );
+    updateUI({ announceChange: true });
+    announce(`Kept ${pending.originalEmail} for this file.`);
+    els.afterTable.closest<HTMLElement>(".table-scroll")?.focus();
+  }
+}
+
 function updateUI(options: { announceChange?: boolean } = {}): void {
   syncDateSettings();
   const settings = getSettings();
-  const result = cleanRows(state.headers, state.rows, settings, state.manualEdits);
+  const result = cleanRows(state.headers, state.rows, settings, state.manualEdits, state.dismissedEmailTypos);
   state.output = result.output;
   const tableOptions = {
     headers: state.headers,
-    originalIssues: (row: readonly CellValue[]) => issuesForOriginalRow(row, state.headers, settings),
-    onEdit: commitManualEdit
+    originalIssues: (row: readonly CellValue[], sourceIndex: number) => issuesForOriginalRow(
+      row, state.headers, settings, sourceIndex, state.dismissedEmailTypos
+    ),
+    onEdit: commitManualEdit,
+    onEmailSuggestion: reviewEmailSuggestion
   };
   renderTable(els.beforeTable, { ...tableOptions, rows: state.rows, kind: "before" });
   renderTable(els.afterTable, { ...tableOptions, rows: result.output, kind: "after" });
@@ -354,12 +416,13 @@ function updateUI(options: { announceChange?: boolean } = {}): void {
   els.emptyCount.textContent = String(result.summary.emptyRows);
   els.dateCount.textContent = String(result.summary.normalizedDates);
   els.duplicateCount.textContent = String(result.summary.duplicateRows);
-  els.issueCount.textContent = String(result.summary.invalidEmails + result.summary.invalidDates);
+  const valuesToReview = result.summary.invalidEmails + result.summary.possibleEmailTypos + result.summary.invalidDates;
+  els.issueCount.textContent = String(valuesToReview);
   const extension = (els.outputFormat.value as OutputFormat).toUpperCase();
   els.downloadMeta.textContent = `${extension} · ${result.output.length} rows · ${state.isDemo ? "demo data" : "ready to download"}`;
   renderInsights(result, settings);
   if (options.announceChange) {
-    announce(`${result.output.length} cleaned rows ready. ${result.summary.invalidEmails + result.summary.invalidDates} values need review.`);
+    announce(`${result.output.length} cleaned rows ready. ${valuesToReview} values need review.`);
   }
 }
 
@@ -405,6 +468,7 @@ function adoptSheet(rawRows: CellValue[][], headerIndex: number): void {
   state.rows = prepared.rows;
   state.generatedHeaderCount = prepared.generatedHeaderCount;
   state.manualEdits.clear();
+  state.dismissedEmailTypos.clear();
   configureColumns({ resetRules: true });
   setFilePresentation();
   updateUI({ announceChange: true });
@@ -586,6 +650,7 @@ function bindEvents(): void {
     if (els.formulaDialog.returnValue === "safe") void downloadCleaned({ safe: true });
     if (els.formulaDialog.returnValue === "original") void downloadCleaned();
   });
+  els.emailTypoDialog.addEventListener("close", finishEmailSuggestionReview);
   window.addEventListener("beforeunload", () => {
     themeController.dispose();
     processor.dispose();

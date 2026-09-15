@@ -1,4 +1,5 @@
 import type { CellValue, CleanedRow, RowIssues } from "./types.ts";
+import { EMAIL_TYPO_ISSUE, suggestEmailDomain } from "./email-domains.ts";
 import { cellToString } from "./value.ts";
 
 const VIRTUAL_ROW_BUFFER = 12;
@@ -15,8 +16,9 @@ export interface TableViewOptions {
   headers: readonly string[];
   rows: readonly TableEntry[];
   kind: "before" | "after";
-  originalIssues: (row: readonly CellValue[]) => RowIssues;
+  originalIssues: (row: readonly CellValue[], sourceIndex: number) => RowIssues;
   onEdit: (sourceIndex: number, columnIndex: number, nextValue: string) => boolean;
+  onEmailSuggestion: (sourceIndex: number, columnIndex: number, originalEmail: string, correctedEmail: string) => void;
 }
 
 const virtualTables = new WeakMap<HTMLTableElement, VirtualController>();
@@ -103,7 +105,7 @@ function createDataRow(
   const cleaned = isCleanedRow(entry);
   const values = cleaned ? entry.values : entry;
   const sourceIndex = cleaned ? entry.sourceIndex : visibleIndex;
-  const issues = cleaned ? entry.issues : options.originalIssues(entry);
+  const issues = cleaned ? entry.issues : options.originalIssues(entry, sourceIndex);
   const row = document.createElement("tr");
   row.setAttribute("aria-rowindex", String(visibleIndex + 2));
   const number = document.createElement("td");
@@ -122,8 +124,22 @@ function createDataRow(
       cell.classList.add("warning");
       const issue = document.createElement("span");
       issue.className = "issue";
-      issue.textContent = issueText;
+      issue.textContent = issueText === EMAIL_TYPO_ISSUE ? "Possible typo" : issueText;
       cell.append(issue);
+      if (options.kind === "after" && cleaned && issueText === EMAIL_TYPO_ISSUE) {
+        const suggestion = suggestEmailDomain(display);
+        if (suggestion) {
+          const review = document.createElement("button");
+          review.type = "button";
+          review.className = "typo-review";
+          review.textContent = "Review";
+          review.setAttribute("aria-label", `Review possible email typo in row ${sourceIndex + 1}, ${options.headers[columnIndex] ?? "Email"}`);
+          review.addEventListener("click", () => {
+            options.onEmailSuggestion(sourceIndex, columnIndex, suggestion.originalEmail, suggestion.correctedEmail);
+          });
+          cell.append(review);
+        }
+      }
     } else if (options.kind === "after" && cleaned && entry.changed) {
       cell.classList.add("changed");
     }

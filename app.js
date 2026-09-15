@@ -143,9 +143,68 @@ function parseDate(value, outputFormat, inputOrder) {
 }
 return { isValidDateParts, formatDate, parseDate };
 })();
+const __emailDomains = (() => {
+const EMAIL_TYPO_ISSUE = "Possible email typo";
+const PROVIDER_DOMAINS = [
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
+    "yahoo.com", "myyahoo.com", "yahoo.co.uk", "yahoo.fr", "icloud.com", "me.com", "mac.com",
+    "proton.me", "protonmail.com", "pm.me", "protonmail.ch", "gmx.com", "mail.com",
+    "fastmail.com", "zohomail.com", "aol.com"
+];
+const knownDomains = new Set(PROVIDER_DOMAINS);
+const nearDomains = new Map();
+function addVariant(variant, domain) {
+    if (variant === domain || knownDomains.has(variant)) return;
+    const previous = nearDomains.get(variant);
+    if (previous === undefined) nearDomains.set(variant, domain);
+    else if (previous !== domain) nearDomains.set(variant, null);
+}
+for (const domain of PROVIDER_DOMAINS) {
+    const dot = domain.indexOf(".");
+    const name = domain.slice(0, dot);
+    const suffix = domain.slice(dot);
+    if (name.length < 5) continue;
+    for (let index = 0; index < name.length; index += 1) {
+        addVariant(`${name.slice(0, index)}${name.slice(index + 1)}${suffix}`, domain);
+        if (index + 1 < name.length && name.charAt(index) !== name.charAt(index + 1)) {
+            addVariant(`${name.slice(0, index)}${name.charAt(index + 1)}${name.charAt(index)}${name.slice(index + 2)}${suffix}`, domain);
+        }
+        for (const letter of "abcdefghijklmnopqrstuvwxyz") {
+            if (letter !== name.charAt(index)) addVariant(`${name.slice(0, index)}${letter}${name.slice(index + 1)}${suffix}`, domain);
+        }
+    }
+    for (let index = 0; index <= name.length; index += 1) {
+        for (const letter of "abcdefghijklmnopqrstuvwxyz") {
+            addVariant(`${name.slice(0, index)}${letter}${name.slice(index)}${suffix}`, domain);
+        }
+    }
+}
+function emailCellKey(sourceIndex, columnIndex) {
+    return `${sourceIndex}:${columnIndex}`;
+}
+function isDismissedEmailTypo(email, sourceIndex, columnIndex, dismissed) {
+    return dismissed.get(emailCellKey(sourceIndex, columnIndex)) === email.trim().toLowerCase();
+}
+function suggestEmailDomain(email) {
+    const originalEmail = email.trim();
+    const at = originalEmail.lastIndexOf("@");
+    if (at <= 0 || at === originalEmail.length - 1) return null;
+    const domain = originalEmail.slice(at + 1).toLowerCase();
+    if (knownDomains.has(domain)) return null;
+    const suggestedDomain = nearDomains.get(domain);
+    if (!suggestedDomain) return null;
+    return {
+        originalEmail,
+        correctedEmail: `${originalEmail.slice(0, at + 1)}${suggestedDomain}`,
+        suggestedDomain
+    };
+}
+return { EMAIL_TYPO_ISSUE, emailCellKey, isDismissedEmailTypo, suggestEmailDomain };
+})();
 const __module2 = (() => {
 const { parseDate } = __module1;
 const { cellToString, isBlankRow, isValidDateObject } = __module0;
+const { EMAIL_TYPO_ISSUE, isDismissedEmailTypo, suggestEmailDomain } = __emailDomains;
 function isEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(cellToString(value).trim());
 }
@@ -187,23 +246,27 @@ function duplicateCount(rows, columnIndex) {
     });
     return duplicates;
 }
-function diagnoseRows(headers, rows, settings) {
+function diagnoseRows(headers, rows, settings, dismissedEmailTypos) {
     const dedupIndex = headers.indexOf(settings.dedupColumn);
     const emailIndex = headers.indexOf(settings.emailColumn);
     const dateIndex = headers.indexOf(settings.dateColumn);
     return {
-        duplicateValues: duplicateCount(rows, dedupIndex),
-        invalidEmails: emailIndex < 0 ? 0 : rows.filter((row)=>{
-            const value = (row[emailIndex] ?? "").trim();
+        duplicateValues: duplicateCount(rows.map((entry)=>entry.values), dedupIndex),
+        invalidEmails: emailIndex < 0 ? 0 : rows.filter((entry)=>{
+            const value = (entry.values[emailIndex] ?? "").trim();
             return Boolean(value) && !isEmail(value);
         }).length,
-        invalidDates: dateIndex < 0 ? 0 : rows.filter((row)=>{
-            const value = (row[dateIndex] ?? "").trim();
+        possibleEmailTypos: emailIndex < 0 ? 0 : rows.filter((entry)=>{
+            const value = (entry.values[emailIndex] ?? "").trim();
+            return isEmail(value) && Boolean(suggestEmailDomain(value)) && !isDismissedEmailTypo(value, entry.sourceIndex, emailIndex, dismissedEmailTypos);
+        }).length,
+        invalidDates: dateIndex < 0 ? 0 : rows.filter((entry)=>{
+            const value = (entry.values[dateIndex] ?? "").trim();
             return Boolean(value) && parseDate(value, settings.dateFormat, settings.inputDateOrder).status === "invalid";
         }).length
     };
 }
-function validateAndNormalize(values, headers, settings) {
+function validateAndNormalize(values, headers, settings, sourceIndex, dismissedEmailTypos) {
     const next = [
         ...values
     ];
@@ -215,6 +278,9 @@ function validateAndNormalize(values, headers, settings) {
     if (settings.validateEmail && emailIndex >= 0) {
         const email = (next[emailIndex] ?? "").trim();
         if (email && !isEmail(email)) issues[emailIndex] = "Invalid email";
+        else if (email && suggestEmailDomain(email) && !isDismissedEmailTypo(email, sourceIndex, emailIndex, dismissedEmailTypos)) {
+            issues[emailIndex] = EMAIL_TYPO_ISSUE;
+        }
     }
     if (settings.normalizeDates && dateIndex >= 0) {
         const source = next[dateIndex] ?? "";
@@ -236,15 +302,16 @@ function validateAndNormalize(values, headers, settings) {
         normalizedDate
     };
 }
-function cleanRows(headers, rows, settings, manualEdits) {
+function cleanRows(headers, rows, settings, manualEdits, dismissedEmailTypos = new Map()) {
     const prepared = prepareRows(rows, settings, manualEdits);
     const remaining = settings.removeEmpty ? prepared.filter((entry)=>!isBlankRow(entry.values)) : prepared;
-    const diagnostics = diagnoseRows(headers, remaining.map((entry)=>entry.values), settings);
+    const diagnostics = diagnoseRows(headers, remaining, settings, dismissedEmailTypos);
     const summary = {
         changedRows: 0,
         emptyRows: prepared.length - remaining.length,
         duplicateRows: 0,
         invalidEmails: 0,
+        possibleEmailTypos: 0,
         invalidDates: 0,
         normalizedDates: 0
     };
@@ -260,11 +327,12 @@ function cleanRows(headers, rows, settings, manualEdits) {
             }
             if (key) seen.add(key);
         }
-        const processed = validateAndNormalize(entry.values, headers, settings);
+        const processed = validateAndNormalize(entry.values, headers, settings, entry.sourceIndex, dismissedEmailTypos);
         const changed = entry.changed || processed.changed;
         if (changed) summary.changedRows += 1;
         if (processed.normalizedDate) summary.normalizedDates += 1;
         summary.invalidEmails += Object.values(processed.issues).filter((issue)=>issue === "Invalid email").length;
+        summary.possibleEmailTypos += Object.values(processed.issues).filter((issue)=>issue === EMAIL_TYPO_ISSUE).length;
         summary.invalidDates += Object.values(processed.issues).filter((issue)=>issue === "Invalid date").length;
         output.push({
             values: processed.values,
@@ -280,9 +348,9 @@ function cleanRows(headers, rows, settings, manualEdits) {
         preparedRows: remaining.map((entry)=>entry.values)
     };
 }
-function issuesForOriginalRow(row, headers, settings) {
+function issuesForOriginalRow(row, headers, settings, sourceIndex, dismissedEmailTypos) {
     const values = row.map(cellToString);
-    return validateAndNormalize(values, headers, settings).issues;
+    return validateAndNormalize(values, headers, settings, sourceIndex, dismissedEmailTypos).issues;
 }
 return { isEmail, cleanRows, issuesForOriginalRow };
 })();
@@ -310,11 +378,11 @@ const SAMPLE_ROWS = [
     [
         "C-1043",
         "Mateo Silva",
-        "mateo.silva@example.com",
+        "mateo.silva@mgail.com",
         "04-01-25",
         "149",
         "Brazil",
-        "Asked for invoice"
+        "Email domain may be misspelled"
     ],
     [
         "C-1044",
@@ -427,11 +495,11 @@ const SAMPLE_ROWS = [
     [
         "C-1056",
         "  Chloe Martin",
-        " chloe.martin@example.com",
+        " chloe.martin@outlok.com",
         "2025/01/16",
         "149.50",
         "Czechia",
-        "Follow-up"
+        "Email domain may be misspelled"
     ],
     [
         "C-1057",
@@ -948,6 +1016,7 @@ function safeRows(rows) {
 return { isFormulaLike, dangerousFormulaCount, makeSpreadsheetSafe, safeRows };
 })();
 const __module10 = (() => {
+const { EMAIL_TYPO_ISSUE, suggestEmailDomain } = __emailDomains;
 const { cellToString } = __module0;
 const VIRTUAL_ROW_BUFFER = 12;
 const virtualTables = new WeakMap();
@@ -1020,7 +1089,7 @@ function createDataRow(entry, visibleIndex, options) {
     const cleaned = isCleanedRow(entry);
     const values = cleaned ? entry.values : entry;
     const sourceIndex = cleaned ? entry.sourceIndex : visibleIndex;
-    const issues = cleaned ? entry.issues : options.originalIssues(entry);
+    const issues = cleaned ? entry.issues : options.originalIssues(entry, sourceIndex);
     const row = document.createElement("tr");
     row.setAttribute("aria-rowindex", String(visibleIndex + 2));
     const number = document.createElement("td");
@@ -1039,8 +1108,22 @@ function createDataRow(entry, visibleIndex, options) {
             cell.classList.add("warning");
             const issue = document.createElement("span");
             issue.className = "issue";
-            issue.textContent = issueText;
+            issue.textContent = issueText === EMAIL_TYPO_ISSUE ? "Possible typo" : issueText;
             cell.append(issue);
+            if (options.kind === "after" && cleaned && issueText === EMAIL_TYPO_ISSUE) {
+                const suggestion = suggestEmailDomain(display);
+                if (suggestion) {
+                    const review = document.createElement("button");
+                    review.type = "button";
+                    review.className = "typo-review";
+                    review.textContent = "Review";
+                    review.setAttribute("aria-label", `Review possible email typo in row ${sourceIndex + 1}, ${options.headers[columnIndex] ?? "Email"}`);
+                    review.addEventListener("click", ()=>{
+                        options.onEmailSuggestion(sourceIndex, columnIndex, suggestion.originalEmail, suggestion.correctedEmail);
+                    });
+                    cell.append(review);
+                }
+            }
         } else if (options.kind === "after" && cleaned && entry.changed) {
             cell.classList.add("changed");
         }
@@ -1183,6 +1266,7 @@ const { findHeaderRow, headerCandidates, prepareSheet } = __module6;
 const { renderTable } = __module10;
 const { createThemeController } = __module11;
 const { cellToString, normalizeError } = __module0;
+const { emailCellKey } = __emailDomains;
 const DATE_HEADER_HINT = /\b(date|day|time|created|updated|due|deadline|start|end|birth|birthday|dob|joined)\b/i;
 const EMAIL_HEADER_HINT = /\be-?mail\b/i;
 const DEDUP_HEADER_HINT = /\b(e-?mail|id|identifier|code|reference|number)\b/i;
@@ -1241,7 +1325,9 @@ const els = {
     downloadMeta: required("#downloadMeta"),
     announcer: required("#announcer"),
     formulaDialog: required("#formulaDialog"),
-    formulaDialogCopy: required("#formulaDialogCopy")
+    formulaDialogCopy: required("#formulaDialogCopy"),
+    emailTypoDialog: required("#emailTypoDialog"),
+    emailTypoDialogCopy: required("#emailTypoDialogCopy")
 };
 const state = {
     headers: [
@@ -1265,9 +1351,11 @@ const state = {
     generatedHeaderCount: 0,
     output: [],
     manualEdits: new Map(),
+    dismissedEmailTypos: new Map(),
     processing: false
 };
 const processor = new FileProcessor();
+let pendingEmailSuggestion = null;
 function announce(message) {
     els.announcer.textContent = "";
     window.setTimeout(()=>{
@@ -1441,6 +1529,17 @@ function renderInsights(result, settings) {
             }
         }));
     }
+    if (result.diagnostics.possibleEmailTypos > 0) {
+        const count = result.diagnostics.possibleEmailTypos;
+        insights.push(createInsight(`${count} possible email ${count === 1 ? "domain typo" : "domain typos"} to review.`, {
+            tone: "warning",
+            actionLabel: settings.validateEmail ? undefined : "Enable email check",
+            onAction: settings.validateEmail ? undefined : ()=>{
+                els.validateEmail.checked = true;
+                updateUI({ announceChange: true });
+            }
+        }));
+    }
     if (result.diagnostics.invalidDates > 0) {
         const count = result.diagnostics.invalidDates;
         insights.push(createInsight(`${count} ${count === 1 ? "date needs" : "dates need"} review.`, {
@@ -1462,6 +1561,7 @@ function commitManualEdit(sourceIndex, columnIndex, nextValue) {
         assertCellLength(nextValue);
         const original = cellToString(state.rows[sourceIndex]?.[columnIndex]);
         const key = `${sourceIndex}:${columnIndex}`;
+        state.dismissedEmailTypos.delete(key);
         if (nextValue === original) state.manualEdits.delete(key);
         else state.manualEdits.set(key, nextValue);
         clearFileError();
@@ -1474,15 +1574,39 @@ function commitManualEdit(sourceIndex, columnIndex, nextValue) {
         return false;
     }
 }
+function reviewEmailSuggestion(sourceIndex, columnIndex, originalEmail, correctedEmail) {
+    if (state.processing) return;
+    pendingEmailSuggestion = { sourceIndex, columnIndex, originalEmail, correctedEmail };
+    els.emailTypoDialogCopy.textContent = `Keep ${originalEmail}, or use ${correctedEmail}. This is a suggestion, not a confirmed error.`;
+    els.emailTypoDialog.returnValue = "";
+    els.emailTypoDialog.showModal();
+}
+function finishEmailSuggestionReview() {
+    const pending = pendingEmailSuggestion;
+    pendingEmailSuggestion = null;
+    if (!pending) return;
+    if (els.emailTypoDialog.returnValue === "use") {
+        if (commitManualEdit(pending.sourceIndex, pending.columnIndex, pending.correctedEmail)) {
+            announce(`Email changed to ${pending.correctedEmail}.`);
+            els.afterTable.closest(".table-scroll")?.focus();
+        }
+    } else if (els.emailTypoDialog.returnValue === "keep") {
+        state.dismissedEmailTypos.set(emailCellKey(pending.sourceIndex, pending.columnIndex), pending.originalEmail.toLowerCase());
+        updateUI({ announceChange: true });
+        announce(`Kept ${pending.originalEmail} for this file.`);
+        els.afterTable.closest(".table-scroll")?.focus();
+    }
+}
 function updateUI(options = {}) {
     syncDateSettings();
     const settings = getSettings();
-    const result = cleanRows(state.headers, state.rows, settings, state.manualEdits);
+    const result = cleanRows(state.headers, state.rows, settings, state.manualEdits, state.dismissedEmailTypos);
     state.output = result.output;
     const tableOptions = {
         headers: state.headers,
-        originalIssues: (row)=>issuesForOriginalRow(row, state.headers, settings),
-        onEdit: commitManualEdit
+        originalIssues: (row, sourceIndex)=>issuesForOriginalRow(row, state.headers, settings, sourceIndex, state.dismissedEmailTypos),
+        onEdit: commitManualEdit,
+        onEmailSuggestion: reviewEmailSuggestion
     };
     renderTable(els.beforeTable, {
         ...tableOptions,
@@ -1500,12 +1624,13 @@ function updateUI(options = {}) {
     els.emptyCount.textContent = String(result.summary.emptyRows);
     els.dateCount.textContent = String(result.summary.normalizedDates);
     els.duplicateCount.textContent = String(result.summary.duplicateRows);
-    els.issueCount.textContent = String(result.summary.invalidEmails + result.summary.invalidDates);
+    const valuesToReview = result.summary.invalidEmails + result.summary.possibleEmailTypos + result.summary.invalidDates;
+    els.issueCount.textContent = String(valuesToReview);
     const extension = els.outputFormat.value.toUpperCase();
     els.downloadMeta.textContent = `${extension} · ${result.output.length} rows · ${state.isDemo ? "demo data" : "ready to download"}`;
     renderInsights(result, settings);
     if (options.announceChange) {
-        announce(`${result.output.length} cleaned rows ready. ${result.summary.invalidEmails + result.summary.invalidDates} values need review.`);
+        announce(`${result.output.length} cleaned rows ready. ${valuesToReview} values need review.`);
     }
 }
 function setFilePresentation() {
@@ -1545,6 +1670,7 @@ function adoptSheet(rawRows, headerIndex) {
     state.rows = prepared.rows;
     state.generatedHeaderCount = prepared.generatedHeaderCount;
     state.manualEdits.clear();
+    state.dismissedEmailTypos.clear();
     configureColumns({
         resetRules: true
     });
@@ -1752,6 +1878,7 @@ function bindEvents() {
         });
         if (els.formulaDialog.returnValue === "original") void downloadCleaned();
     });
+    els.emailTypoDialog.addEventListener("close", finishEmailSuggestionReview);
     window.addEventListener("beforeunload", ()=>{
         themeController.dispose();
         processor.dispose();

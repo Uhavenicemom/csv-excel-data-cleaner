@@ -225,6 +225,9 @@ td.changed { background: var(--changed-soft); }
 .after-region .cell-editor:focus { background: var(--surface); outline: 2px solid var(--blue); outline-offset: 1px; }
 .after-region .cell-editor:empty::before { content: "—"; color: var(--muted-soft); }
 td .issue { display: inline-block; margin-left: 5px; color: var(--amber); font-size: 12px; font-weight: 700; pointer-events: none; user-select: none; }
+.typo-review { min-height: 18px; margin-left: 6px; padding: 0 6px; color: var(--blue-dark); font: inherit; font-size: 12px; font-weight: 700; line-height: 16px; background: var(--surface); border: 1px solid var(--blue-border); border-radius: 5px; cursor: pointer; }
+.typo-review:hover { background: var(--blue-soft); }
+.typo-review:focus-visible { outline: 2px solid var(--focus-ring-strong); outline-offset: 2px; }
 
 .results-panel { grid-area: results; display: grid; grid-template-columns: minmax(150px, .58fr) minmax(0, 1.55fr) minmax(220px, .64fr); gap: clamp(16px, 2vw, 28px); align-items: center; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .results-intro strong, .results-intro small { display: block; }
@@ -300,6 +303,7 @@ td .issue { display: inline-block; margin-left: 5px; color: var(--amber); font-s
   .table-heading > div { flex-wrap: wrap; }
   .table-region { height: min(54vh, 360px); }
   .cell-editor { min-width: 44px; min-height: 36px; display: inline-flex; align-items: center; padding-inline: 7px; margin-inline: -7px; }
+  .typo-review { min-height: 28px; padding-inline: 8px; font-size: 13px; line-height: 26px; }
   .results-panel { grid-template-columns: 1fr; gap: 18px; padding: 17px; }
   .result-list { grid-template-columns: 1fr 1fr; gap: 12px 0; }
   .result-list > div:nth-child(odd) { border-left: 0; }

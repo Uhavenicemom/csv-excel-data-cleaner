@@ -1,4 +1,5 @@
 import { parseDate } from "./dates.ts";
+import { EMAIL_TYPO_ISSUE, isDismissedEmailTypo, suggestEmailDomain } from "./email-domains.ts";
 import type {
   CellValue,
   CleanedRow,
@@ -59,18 +60,28 @@ function duplicateCount(rows: readonly (readonly string[])[], columnIndex: numbe
   return duplicates;
 }
 
-function diagnoseRows(headers: readonly string[], rows: readonly (readonly string[])[], settings: CleaningSettings): Diagnostics {
+function diagnoseRows(
+  headers: readonly string[],
+  rows: readonly { values: readonly string[]; sourceIndex: number }[],
+  settings: CleaningSettings,
+  dismissedEmailTypos: ReadonlyMap<string, string>
+): Diagnostics {
   const dedupIndex = headers.indexOf(settings.dedupColumn);
   const emailIndex = headers.indexOf(settings.emailColumn);
   const dateIndex = headers.indexOf(settings.dateColumn);
   return {
-    duplicateValues: duplicateCount(rows, dedupIndex),
-    invalidEmails: emailIndex < 0 ? 0 : rows.filter((row) => {
-      const value = (row[emailIndex] ?? "").trim();
+    duplicateValues: duplicateCount(rows.map((entry) => entry.values), dedupIndex),
+    invalidEmails: emailIndex < 0 ? 0 : rows.filter(({ values }) => {
+      const value = (values[emailIndex] ?? "").trim();
       return Boolean(value) && !isEmail(value);
     }).length,
-    invalidDates: dateIndex < 0 ? 0 : rows.filter((row) => {
-      const value = (row[dateIndex] ?? "").trim();
+    possibleEmailTypos: emailIndex < 0 ? 0 : rows.filter(({ values, sourceIndex }) => {
+      const value = (values[emailIndex] ?? "").trim();
+      return isEmail(value) && Boolean(suggestEmailDomain(value))
+        && !isDismissedEmailTypo(value, sourceIndex, emailIndex, dismissedEmailTypos);
+    }).length,
+    invalidDates: dateIndex < 0 ? 0 : rows.filter(({ values }) => {
+      const value = (values[dateIndex] ?? "").trim();
       return Boolean(value) && parseDate(value, settings.dateFormat, settings.inputDateOrder).status === "invalid";
     }).length
   };
@@ -79,7 +90,9 @@ function diagnoseRows(headers: readonly string[], rows: readonly (readonly strin
 function validateAndNormalize(
   values: string[],
   headers: readonly string[],
-  settings: CleaningSettings
+  settings: CleaningSettings,
+  sourceIndex: number,
+  dismissedEmailTypos: ReadonlyMap<string, string>
 ): { values: string[]; issues: RowIssues; changed: boolean; normalizedDate: boolean } {
   const next = [...values];
   const issues: RowIssues = {};
@@ -91,6 +104,10 @@ function validateAndNormalize(
   if (settings.validateEmail && emailIndex >= 0) {
     const email = (next[emailIndex] ?? "").trim();
     if (email && !isEmail(email)) issues[emailIndex] = "Invalid email";
+    else if (email && suggestEmailDomain(email)
+      && !isDismissedEmailTypo(email, sourceIndex, emailIndex, dismissedEmailTypos)) {
+      issues[emailIndex] = EMAIL_TYPO_ISSUE;
+    }
   }
 
   if (settings.normalizeDates && dateIndex >= 0) {
@@ -113,16 +130,18 @@ export function cleanRows(
   headers: readonly string[],
   rows: readonly (readonly CellValue[])[],
   settings: CleaningSettings,
-  manualEdits: ReadonlyMap<string, string>
+  manualEdits: ReadonlyMap<string, string>,
+  dismissedEmailTypos: ReadonlyMap<string, string> = new Map()
 ): CleaningResult {
   const prepared = prepareRows(rows, settings, manualEdits);
   const remaining = settings.removeEmpty ? prepared.filter((entry) => !isBlankRow(entry.values)) : prepared;
-  const diagnostics = diagnoseRows(headers, remaining.map((entry) => entry.values), settings);
+  const diagnostics = diagnoseRows(headers, remaining, settings, dismissedEmailTypos);
   const summary = {
     changedRows: 0,
     emptyRows: prepared.length - remaining.length,
     duplicateRows: 0,
     invalidEmails: 0,
+    possibleEmailTypos: 0,
     invalidDates: 0,
     normalizedDates: 0
   };
@@ -140,11 +159,12 @@ export function cleanRows(
       if (key) seen.add(key);
     }
 
-    const processed = validateAndNormalize(entry.values, headers, settings);
+    const processed = validateAndNormalize(entry.values, headers, settings, entry.sourceIndex, dismissedEmailTypos);
     const changed = entry.changed || processed.changed;
     if (changed) summary.changedRows += 1;
     if (processed.normalizedDate) summary.normalizedDates += 1;
     summary.invalidEmails += Object.values(processed.issues).filter((issue) => issue === "Invalid email").length;
+    summary.possibleEmailTypos += Object.values(processed.issues).filter((issue) => issue === EMAIL_TYPO_ISSUE).length;
     summary.invalidDates += Object.values(processed.issues).filter((issue) => issue === "Invalid date").length;
     output.push({ values: processed.values, issues: processed.issues, changed, sourceIndex: entry.sourceIndex });
   });
@@ -155,8 +175,10 @@ export function cleanRows(
 export function issuesForOriginalRow(
   row: readonly CellValue[],
   headers: readonly string[],
-  settings: CleaningSettings
+  settings: CleaningSettings,
+  sourceIndex: number,
+  dismissedEmailTypos: ReadonlyMap<string, string>
 ): RowIssues {
   const values = row.map(cellToString);
-  return validateAndNormalize(values, headers, settings).issues;
+  return validateAndNormalize(values, headers, settings, sourceIndex, dismissedEmailTypos).issues;
 }

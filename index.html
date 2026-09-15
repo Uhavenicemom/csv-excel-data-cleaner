@@ -8,7 +8,7 @@
     <title>Data Cleaner — local CSV & Excel cleanup</title>
     <script src="theme-boot.js"></script>
     <link rel="stylesheet" href="styles.css" />
-    <script defer src="app.js?v=5"></script>
+    <script defer src="app.js?v=6"></script>
   </head>
   <body>
     <main class="app-shell" aria-label="Data Cleaner">
@@ -148,6 +148,17 @@
               <button class="download-button" id="safeDownloadButton" value="safe" type="submit">Download safe version</button>
               <button class="secondary-button" id="originalDownloadButton" value="original" type="submit">Download original</button>
               <button class="text-button" id="cancelFormulaButton" value="cancel" type="submit">Cancel</button>
+            </div>
+          </form>
+        </dialog>
+        <dialog class="formula-dialog" id="emailTypoDialog" aria-labelledby="emailTypoDialogTitle" aria-describedby="emailTypoDialogCopy">
+          <form method="dialog">
+            <h2 id="emailTypoDialogTitle">Possible email typo</h2>
+            <p id="emailTypoDialogCopy"></p>
+            <div class="formula-actions">
+              <button class="download-button" value="use" type="submit">Use suggestion</button>
+              <button class="secondary-button" value="keep" type="submit">Keep original</button>
+              <button class="text-button" value="cancel" type="submit">Cancel</button>
             </div>
           </form>
         </dialog>

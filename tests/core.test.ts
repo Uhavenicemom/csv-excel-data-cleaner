@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { cleanRows } from "../src/cleaning.ts";
 import { csvToRows, decodeUtf8, detectCsvDelimiter, serializeCsv } from "../src/csv.ts";
 import { parseDate } from "../src/dates.ts";
+import { emailCellKey, suggestEmailDomain } from "../src/email-domains.ts";
 import { isFormulaLike, makeSpreadsheetSafe } from "../src/security.ts";
 import { assertTableLimits, type TabularLimits } from "../src/limits.ts";
 import { findHeaderRow, prepareSheet } from "../src/sheets.ts";
@@ -103,4 +104,46 @@ test("recomputes diagnostics after manual edits and keeps de-duplicate off by de
   assert.equal(edited.diagnostics.invalidEmails, 1);
   assert.equal(edited.diagnostics.invalidDates, 0);
   assert.equal(edited.diagnostics.duplicateValues, 0);
+});
+
+test("suggests only clear domain typos without changing the email", () => {
+  assert.deepEqual(suggestEmailDomain("Ada@mgail.com"), {
+    originalEmail: "Ada@mgail.com",
+    correctedEmail: "Ada@gmail.com",
+    suggestedDomain: "gmail.com"
+  });
+  assert.equal(suggestEmailDomain("ada@outlok.com")?.correctedEmail, "ada@outlook.com");
+  assert.equal(suggestEmailDomain("ada@yaho.com")?.correctedEmail, "ada@yahoo.com");
+  assert.equal(suggestEmailDomain("ada@iclod.com")?.correctedEmail, "ada@icloud.com");
+  assert.equal(suggestEmailDomain("ada@protonmial.com")?.correctedEmail, "ada@protonmail.com");
+  assert.equal(suggestEmailDomain("ada@fastmai.com")?.correctedEmail, "ada@fastmail.com");
+  for (const email of ["ada@gmail.com", "ada@googlemail.com", "ada@mycompany.com", "ada@gmail.co", "ada@gnx.com", "not-an-email"]) {
+    assert.equal(suggestEmailDomain(email), null, email);
+  }
+});
+
+test("keeps possible typos separate from invalid addresses and respects both choices", () => {
+  const emailSettings = { ...settings, normalizeDates: false };
+  const headers = ["Name", "Email", "Date"];
+  const rows = [
+    ["Ada", "Ada@mgail.com", "2025-01-04"],
+    ["Ben", "bad-email", "2025-01-05"],
+    ["Cia", "cia@mycompany.com", "2025-01-06"]
+  ];
+  const first = cleanRows(headers, rows, emailSettings, new Map());
+  assert.equal(first.diagnostics.possibleEmailTypos, 1);
+  assert.equal(first.summary.possibleEmailTypos, 1);
+  assert.equal(first.summary.invalidEmails, 1);
+  assert.equal(first.output[0]?.values[1], "Ada@mgail.com");
+  assert.equal(first.output[0]?.issues[1], "Possible email typo");
+
+  const kept = cleanRows(headers, rows, emailSettings, new Map(), new Map([[emailCellKey(0, 1), "ada@mgail.com"]]));
+  assert.equal(kept.summary.possibleEmailTypos, 0);
+  assert.equal(kept.diagnostics.possibleEmailTypos, 0);
+  assert.equal(kept.output[0]?.values[1], "Ada@mgail.com");
+
+  const corrected = cleanRows(headers, rows, emailSettings, new Map([[emailCellKey(0, 1), "Ada@gmail.com"]]));
+  assert.equal(corrected.summary.possibleEmailTypos, 0);
+  assert.equal(corrected.output[0]?.values[1], "Ada@gmail.com");
+  assert.equal(corrected.summary.changedRows, 1);
 });

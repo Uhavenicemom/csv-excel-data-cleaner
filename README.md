@@ -12,6 +12,7 @@ The app works with CSV and Excel (`.xlsx`) files. It lets you preview a sheet, c
 - Keep duplicate removal off until the user explicitly enables it
 - Show compact, actionable notices for duplicate values and values that need review
 - Validate an email column
+- Suggest conservative corrections for close misspellings of common international email-provider domains, with explicit **Use suggestion** or **Keep original** choices
 - Normalize dates to `DD-MM-YY`, `MM-DD-YY`, or `YY-MM-DD`, with a separate input-order choice for ambiguous numeric dates
 - Flag invalid email addresses and dates for review
 - Edit any cleaned cell before downloading
@@ -48,7 +49,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the module boundaries, processing flo
 
 ## Demo data
 
-`customers_dirty.csv` contains synthetic, intentionally inconsistent customer data for testing the cleaner. It is not client data. It demonstrates whitespace cleanup, blank rows, duplicate emails, invalid emails, mixed date formats, invalid dates, and a formula-like export warning.
+`customers_dirty.csv` contains synthetic, intentionally inconsistent customer data for testing the cleaner. It is not client data. It demonstrates whitespace cleanup, blank rows, duplicate emails, invalid email syntax, possible email-domain typos, mixed date formats, invalid dates, and a formula-like export warning.
 
 ## Limits of this version
 
@@ -57,5 +58,7 @@ Hosted files are limited to 50 MB and direct-open files to 10 MB. A table may co
 If background processing fails or takes more than 30 seconds on the hosted app, the operation stops with an actionable message. It does not retry heavy parsing on the interface thread.
 
 CSV input must be UTF-8 and may use comma, semicolon, or tab delimiters. Two-digit years are treated as 2000–2099; use four-digit years for older dates.
+
+Email-domain suggestions use a small offline list of international providers and only appear for an unambiguous one-edit typo in the provider name. They do not verify that a mailbox exists, recognize every provider or national domain, or automatically change an address. **Keep original** dismisses that suggestion for the current file only.
 
 Excel files are treated as table data. The export does not aim to preserve workbook formulas, styling, charts, or worksheets that were not selected. Legacy `.xls` files are not supported.

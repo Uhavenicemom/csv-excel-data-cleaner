@@ -11,8 +11,8 @@ CSV / Excel Data Cleaner is a static portfolio demo that a prospective client ca
 3. On GitHub Pages, `src/file-processor.ts` transfers parsing and export work to `src/xlsx-worker.ts`. A worker failure or 30-second timeout stops the operation instead of retrying it on the interface thread.
 4. When `index.html` is opened directly, browser worker restrictions require the smaller 10 MB direct-processing path.
 5. SheetJS is loaded only when an Excel file is parsed or an Excel file is exported. CSV-only sessions do not load the Excel library.
-6. Parsed rows pass through the pure functions in `src/cleaning.ts`, `src/dates.ts`, `src/sheets.ts`, and `src/security.ts`.
-7. `src/table-view.ts` virtualizes large previews while keeping the scroll regions keyboard focusable. Manual edits are written back to the controller state before export.
+6. Parsed rows pass through the pure functions in `src/cleaning.ts`, `src/email-domains.ts`, `src/dates.ts`, `src/sheets.ts`, and `src/security.ts`.
+7. `src/table-view.ts` virtualizes large previews while keeping the scroll regions keyboard focusable. Manual edits and accepted email suggestions are written back to the controller state before export. Dismissed suggestions are scoped to the current file and cleared when a new sheet is loaded.
 
 ## Module responsibilities
 
@@ -22,6 +22,7 @@ CSV / Excel Data Cleaner is a static portfolio demo that a prospective client ca
 - `src/file-processor.ts`: hosted worker lifecycle, direct-open compatibility, lazy Excel support, timeouts, and error propagation.
 - `src/xlsx-worker.ts`: isolated parse, worksheet, and export request handling.
 - `src/cleaning.ts`: deterministic cleaning rules, diagnostics, and summaries.
+- `src/email-domains.ts`: conservative offline provider-domain typo candidates and per-cell dismissal keys; syntax validation remains in `src/cleaning.ts`.
 - `src/table-view.ts`: accessible virtualized tables and cleaned-cell editing.
 - `src/theme.ts`: saved light/dark preference and system-theme fallback.
 - `src/main.ts`: page wiring and user-facing state only.
@@ -33,6 +34,8 @@ The selected file is untrusted input. The app validates the filename extension a
 Hosted and direct-open byte limits are 50 MB and 10 MB respectively. All modes also enforce 200,000 rows, 256 columns, 2,000,000 cells, 100,000 characters per cell, and 50 worksheets. These are safety limits, not performance guarantees; available browser memory and data shape still affect speed.
 
 Before export, formula-like values are counted. The user can download a safe text version or deliberately keep original values. The safe CSV path quotes all fields and prefixes dangerous formulas so spreadsheet software treats them as text.
+
+The email-domain check only suggests an unambiguous one-edit provider-name correction after email syntax validation. It never checks mailbox existence or edits the source automatically. The user explicitly accepts or keeps each suggestion; keeping it stores only a normalized cell value in memory for the active file.
 
 ## Build and verification
 
