@@ -248,7 +248,9 @@ function syncDateSettings(): void {
   const enabled = hasDateRule && els.normalizeDates.checked;
   els.inputDateOrder.disabled = !enabled || state.processing;
   els.dateFormat.disabled = !enabled || state.processing;
-  els.dateSettingsHelp.hidden = enabled;
+  // Keep the hint's layout space so toggling the rule cannot shift adjacent controls.
+  els.dateSettingsHelp.hidden = false;
+  els.dateSettingsHelp.classList.toggle("is-concealed", enabled);
   els.dateSettingsHelp.textContent = hasDateRule
     ? "Enable Normalize dates to edit these settings."
     : "No suitable date column was found.";

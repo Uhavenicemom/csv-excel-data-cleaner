@@ -167,6 +167,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [contenteditabl
 .controls-row > label { min-width: 0; color: var(--muted); font-size: 12px; font-weight: 650; }
 .controls-row label > span { color: var(--muted-soft); font-weight: 500; }
 .field-hint { display: block; margin-top: 5px; color: var(--muted) !important; font-size: 11px; line-height: 1.25; }
+.field-hint.is-concealed { visibility: hidden; }
 
 select { display: block; width: 100%; min-height: 42px; margin-top: 6px; padding: 9px 34px 9px 11px; color: var(--text-strong); background-color: var(--surface); background-image: var(--select-arrow); background-repeat: no-repeat; background-position: right 11px center; background-size: 17px; border: 1px solid var(--line); border-radius: 7px; appearance: none; transition: border-color .2s ease, box-shadow .2s ease; }
 select:hover { border-color: var(--line-strong); }
