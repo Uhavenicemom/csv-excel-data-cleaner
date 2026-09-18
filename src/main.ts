@@ -1242,6 +1242,18 @@ function handlePreferenceChange(): void {
   renderBatchPanel();
 }
 
+function handleBatchOutputChange(): void {
+  activePresetSettings = currentPresetSettings();
+  rememberLastUsed();
+  const active = activeBatchItem();
+  if (active) {
+    els.outputFormat.value = batchOutputFormat(activePresetSettings.batchOutputMode, active.file.name);
+  }
+  updateUI();
+  renderBatchPanel();
+  announce("Batch output format updated. Existing review decisions were kept.");
+}
+
 function loadSelectedPreset(): void {
   const selected = els.presetSelect.value;
   const settings = selected === "last-used"
@@ -1335,7 +1347,7 @@ function bindEvents(): void {
     els.dateFormat
   ].forEach((control) => control.addEventListener("change", handlePreferenceChange));
   els.inputDateOrder.addEventListener("change", handlePreferenceChange);
-  els.batchOutputMode.addEventListener("change", handlePreferenceChange);
+  els.batchOutputMode.addEventListener("change", handleBatchOutputChange);
   ([
     [els.dedupColumn, "dedup"],
     [els.emailColumn, "email"],
@@ -1434,3 +1446,4 @@ function initialize(): void {
 }
 
 initialize();
+
