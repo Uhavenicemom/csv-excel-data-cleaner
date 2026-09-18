@@ -23,6 +23,10 @@ The app works with CSV and Excel (`.xlsx`) files. It lets you preview a sheet, c
 - Export the selected cleaned sheet as `.csv` or `.xlsx`
 - Warn before exporting cells that could be interpreted as spreadsheet formulas, then let the user choose a quoted safe-text export or the original values
 - Process hosted files in a background worker and stop stalled work after 30 seconds
+- Remember the last cleaning setup in the browser and save up to five named presets; presets contain settings only, never spreadsheet values
+- Process 2–10 CSV/XLSX files as a sequential batch, review each file independently, and exclude unresolved files from export
+- Keep each batch file's original format or convert all ready files to CSV or XLSX
+- Download ready batch results as one ZIP with a client-readable `cleanup_report.csv`
 
 ## Privacy
 
@@ -32,7 +36,7 @@ Files are processed locally in the browser. The app does not send spreadsheet co
 
 Open the [public GitHub Pages demo](https://uhavenicemom.github.io/csv-excel-data-cleaner/). Clients do not need to install or compile anything.
 
-For a portable backup, download the repository and open `index.html` directly. Direct-open mode supports files up to 10 MB; the hosted version supports files up to 50 MB and keeps heavy parsing away from the interface thread.
+For a portable backup, download the repository and open `index.html` directly. Direct-open mode supports files up to 10 MB each; the hosted version supports files up to 50 MB each and keeps heavy parsing away from the interface thread.
 
 ## Develop it
 
@@ -53,7 +57,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the module boundaries, processing flo
 
 ## Limits of this version
 
-Hosted files are limited to 50 MB and direct-open files to 10 MB. A table may contain at most 200,000 rows, 256 columns, 2,000,000 cells, 100,000 characters in one cell, and an Excel workbook may contain at most 50 worksheets. Actual speed depends on the device and the file's structure.
+Hosted files are limited to 50 MB each and direct-open files to 10 MB each. A batch accepts at most 10 files and 100 MB total, processes them sequentially, and retains at most 2,000,000 cells across the batch. A single table may contain at most 200,000 rows, 256 columns, 2,000,000 cells, 100,000 characters in one cell, and an Excel workbook may contain at most 50 worksheets. Actual speed depends on the device and the files' structure.
 
 If background processing fails or takes more than 30 seconds on the hosted app, the operation stops with an actionable message. It does not retry heavy parsing on the interface thread.
 
@@ -61,4 +65,6 @@ CSV input must be UTF-8 and may use comma, semicolon, or tab delimiters. Two-dig
 
 Email-domain suggestions use a small offline list of international providers and only appear for an unambiguous one-edit typo in the provider name. They do not verify that a mailbox exists, recognize every provider or national domain, or automatically change an address. **Keep original** dismisses that suggestion for the current file only.
 
-Excel files are treated as table data. The export does not aim to preserve workbook formulas, styling, charts, or worksheets that were not selected. Legacy `.xls` files are not supported.
+For a batch workbook, the app starts with the first non-empty worksheet and asks for confirmation when more than one worksheet exists. Excel files are treated as table data. The export does not aim to preserve workbook formulas, styling, charts, or worksheets that were not selected. Legacy `.xls` files are not supported.
+
+Batch ZIP creation uses the vendored JSZip library so results are still assembled locally. Files that need review are not included until the visitor fixes the issue, chooses a safe export, confirms the worksheet, or explicitly approves the remaining values.

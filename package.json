@@ -11,7 +11,7 @@
     "build": "node scripts/build.mjs",
     "build:check": "node scripts/build.mjs --check",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/file-processor.test.mjs tests/xlsx.test.mjs",
+    "test": "node --experimental-strip-types --test --test-isolation=none tests/core.test.ts tests/file-processor.test.mjs tests/xlsx.test.mjs tests/archive.test.mjs",
     "audit": "node scripts/audit.mjs",
     "check": "pnpm typecheck && pnpm build:check && pnpm test && pnpm build && pnpm audit"
   },

@@ -24,7 +24,7 @@ The tool processes the selected spreadsheet locally in the visitor's browser. It
 
 ## Operating Context
 
-The visitor chooses a `.csv` or `.xlsx` file. GitHub Pages mode accepts up to 50 MB and performs parsing in a background worker; direct-open backup mode accepts up to 10 MB. For a workbook, the visitor chooses a worksheet. The app uses the first non-empty row as the safe header default and offers the first 20 non-empty rows as alternatives. It finds plausible email, date, and duplicate-key columns. The visitor sees a preview, opts into cleaning actions, corrects values when necessary, and downloads CSV or XLSX output.
+The visitor chooses one or several `.csv` or `.xlsx` files. GitHub Pages mode accepts up to 50 MB per file and performs parsing in a background worker; direct-open backup mode accepts up to 10 MB per file. For a workbook, the visitor chooses a worksheet. The app uses the first non-empty row as the safe header default and offers the first 20 non-empty rows as alternatives. It finds plausible email, date, and duplicate-key columns. The visitor sees a preview, opts into cleaning actions, corrects values when necessary, and downloads CSV or XLSX output. A multi-file selection becomes a sequential review queue and downloads ready results together as a ZIP.
 
 ## Capabilities and Constraints
 
@@ -34,6 +34,11 @@ The visitor chooses a `.csv` or `.xlsx` file. GitHub Pages mode accepts up to 50
 - Reject tables above 200,000 rows, 256 columns, or 2,000,000 cells, cells above 100,000 characters, and workbooks above 50 worksheets.
 - Accept UTF-8 comma-, semicolon-, and tab-delimited text. Reject malformed UTF-8 instead of silently replacing characters.
 - Offer worksheet selection for XLSX files.
+- Remember the last settings locally and support up to five named settings-only presets. Never store spreadsheet rows in a preset.
+- Accept batches of 2–10 files up to 100 MB total, process them sequentially, and retain no more than 2,000,000 cells across the queue.
+- Auto-select the first non-empty worksheet in batch workbooks and require confirmation when a workbook contains more than one sheet.
+- Mark ambiguous or unsafe files as **Needs review**. Exclude them from the ZIP until the visitor resolves the issue or explicitly approves the remaining values.
+- Let batch users preserve each source format or convert every ready file to CSV or XLSX, then include a `cleanup_report.csv` beside the results in one local ZIP.
 - Offer opt-in removal of blank rows, whitespace trimming, and duplicate removal by a suggested relevant column. Duplicate removal is off by default.
 - Show compact in-product notices when duplicates or invalid values are found, with an action to enable the applicable rule.
 - Flag unambiguous, close email-domain typos for common international providers separately from invalid syntax; let the visitor use the suggestion or keep the original address without automatic correction or mailbox-verification claims.
@@ -56,6 +61,7 @@ No client work, testimonials, ratings, or production dataset may be claimed. Dem
 - A useful first version beats a broad, fragile feature list.
 - Output must be easy to inspect before downloading.
 - Manual edits stay in the visitor's browser and are included in the downloaded file.
+- Automation may suggest and organize; it must not silently decide how to handle ambiguous columns, worksheets, or unsafe values.
 
 ## Accessibility & Inclusion
 

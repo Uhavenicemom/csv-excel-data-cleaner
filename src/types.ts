@@ -3,6 +3,18 @@ export type CellValue = string | number | boolean | Date | null | undefined;
 export type InputDateOrder = "DD-MM-YY" | "MM-DD-YY";
 export type OutputDateFormat = InputDateOrder | "YY-MM-DD";
 export type OutputFormat = "csv" | "xlsx";
+export type BatchOutputMode = "original" | OutputFormat;
+
+export interface PresetSettings {
+  removeEmpty: boolean;
+  trimWhitespace: boolean;
+  deduplicate: boolean;
+  validateEmail: boolean;
+  normalizeDates: boolean;
+  inputDateOrder: InputDateOrder;
+  dateFormat: OutputDateFormat;
+  batchOutputMode: BatchOutputMode;
+}
 
 export interface DateParts {
   year: number;

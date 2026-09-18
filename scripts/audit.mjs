@@ -15,13 +15,14 @@ async function filesUnder(directory) {
 }
 
 const sourcePaths = (await filesUnder(path.join(root, "src"))).filter((file) => file.endsWith(".ts"));
-const [html, sourceParts, styles, app, worker, vendor, packageJson, pnpmWorkspace] = await Promise.all([
+const [html, sourceParts, styles, app, worker, vendor, jszip, packageJson, pnpmWorkspace] = await Promise.all([
   readFile(path.join(root, "index.html"), "utf8"),
   Promise.all(sourcePaths.map((file) => readFile(file, "utf8"))),
   readFile(path.join(root, "styles.css"), "utf8"),
   readFile(path.join(root, "app.js"), "utf8"),
   readFile(path.join(root, "xlsx-worker.js"), "utf8"),
   readFile(path.join(root, "vendor/xlsx.full.min.js"), "utf8"),
+  readFile(path.join(root, "vendor/jszip.min.js"), "utf8"),
   readFile(path.join(root, "package.json"), "utf8"),
   readFile(path.join(root, "pnpm-workspace.yaml"), "utf8")
 ]);
@@ -59,6 +60,11 @@ if ((await stat(path.join(root, "vendor/xlsx.full.min.js"))).size < 500_000) fai
 const vendorHash = createHash("sha256").update(vendor).digest("hex").toUpperCase();
 if (vendorHash !== "B315047C382F0F4033305AD72F2204747DAEF391784EE6138289EFC0831B63D0") {
   failures.push("The local Excel library checksum does not match the reviewed copy.");
+}
+if (!/^\/\*!\s+JSZip v3\.10\.1/m.test(jszip)) failures.push("The local ZIP library is missing or has an unexpected version.");
+const jszipHash = createHash("sha256").update(jszip).digest("hex").toUpperCase();
+if (jszipHash !== "ACC7E41455A80765B5FD9C7EE1B8078A6D160BBBCA455AEAE854DE65C947D59E") {
+  failures.push("The local ZIP library checksum does not match the reviewed copy.");
 }
 
 if (failures.length) {

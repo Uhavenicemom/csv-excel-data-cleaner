@@ -2,11 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { cleanRows } from "../src/cleaning.ts";
+import { batchOutputFormat, cleanupReportCsv, uniqueArchiveName, validateBatchSelection } from "../src/batch.ts";
+import { detectColumnCandidates } from "../src/columns.ts";
 import { csvToRows, decodeUtf8, detectCsvDelimiter, serializeCsv } from "../src/csv.ts";
 import { parseDate } from "../src/dates.ts";
 import { emailCellKey, suggestEmailDomain } from "../src/email-domains.ts";
 import { isFormulaLike, makeSpreadsheetSafe } from "../src/security.ts";
 import { assertTableLimits, type TabularLimits } from "../src/limits.ts";
+import {
+  DEFAULT_PRESET,
+  MAX_NAMED_PRESETS,
+  emptyPresetStore,
+  parsePresetStore,
+  upsertNamedPreset
+} from "../src/presets.ts";
 import { findHeaderRow, prepareSheet } from "../src/sheets.ts";
 import type { CleaningSettings } from "../src/types.ts";
 import { cellToString } from "../src/value.ts";
@@ -146,4 +155,73 @@ test("keeps possible typos separate from invalid addresses and respects both cho
   assert.equal(corrected.summary.possibleEmailTypos, 0);
   assert.equal(corrected.output[0]?.values[1], "Ada@gmail.com");
   assert.equal(corrected.summary.changedRows, 1);
+});
+
+test("detects relevant columns independently for each file", () => {
+  const first = detectColumnCandidates(
+    ["Customer", "Email", "Joined"],
+    [["A", "a@example.com", "2025-01-04"], ["B", "b@example.com", "2025-01-05"]],
+    "DD-MM-YY"
+  );
+  const second = detectColumnCandidates(
+    ["Signup date", "Contact email", "Reference"],
+    [["01-31-25", "c@example.com", "R-1"], ["02-01-25", "d@example.com", "R-2"]],
+    "MM-DD-YY"
+  );
+  assert.deepEqual(first.email, ["Email"]);
+  assert.deepEqual(first.date, ["Joined"]);
+  assert.equal(second.email.includes("Contact email"), true);
+  assert.equal(second.date.includes("Signup date"), true);
+  assert.equal(second.dedup.includes("Reference"), true);
+});
+
+test("validates batch limits and keeps mixed input formats predictable", () => {
+  validateBatchSelection([{ name: "a.csv", size: 20 }, { name: "b.xlsx", size: 30 }], 50);
+  assert.throws(() => validateBatchSelection([{ name: "a.csv", size: 20 }], 50), /at least two/);
+  assert.throws(() => validateBatchSelection([
+    { name: "a.csv", size: 20 }, { name: "b.xlsx", size: 51 }
+  ], 50), /larger than the per-file limit/);
+  assert.equal(batchOutputFormat("original", "a.csv"), "csv");
+  assert.equal(batchOutputFormat("original", "b.xlsx"), "xlsx");
+  assert.equal(batchOutputFormat("csv", "b.xlsx"), "csv");
+});
+
+test("creates unique archive names and a client-readable batch report", () => {
+  const used = new Set<string>();
+  assert.equal(uniqueArchiveName("customers_cleaned.csv", used), "customers_cleaned.csv");
+  assert.equal(uniqueArchiveName("customers_cleaned.csv", used), "customers_cleaned-2.csv");
+  const report = cleanupReportCsv([{
+    filename: "customers.csv",
+    status: "ready",
+    sourceRows: 10,
+    outputRows: 9,
+    summary: {
+      changedRows: 4,
+      emptyRows: 1,
+      duplicateRows: 0,
+      invalidEmails: 0,
+      possibleEmailTypos: 0,
+      invalidDates: 0,
+      normalizedDates: 3
+    },
+    reviewReasons: [],
+    approvedAsIs: false,
+    includedInZip: true
+  }]);
+  assert.match(report, /File,Status,Source rows/);
+  assert.match(report, /customers\.csv,ready,10,9,4,1,0,3,0,,No,Yes/);
+});
+
+test("recovers safely from corrupt presets and caps named presets", () => {
+  assert.deepEqual(parsePresetStore("not-json"), emptyPresetStore());
+  assert.deepEqual(parsePresetStore(JSON.stringify({ version: 99, named: [] })), emptyPresetStore());
+  let store = emptyPresetStore();
+  for (let index = 0; index < MAX_NAMED_PRESETS; index += 1) {
+    store = upsertNamedPreset(store, `Preset ${index + 1}`, { ...DEFAULT_PRESET, deduplicate: index % 2 === 0 });
+  }
+  assert.equal(store.named.length, MAX_NAMED_PRESETS);
+  assert.throws(() => upsertNamedPreset(store, "One too many", DEFAULT_PRESET), /up to 5 presets/);
+  const replaced = upsertNamedPreset(store, "preset 1", { ...DEFAULT_PRESET, dateFormat: "YY-MM-DD" });
+  assert.equal(replaced.named.length, MAX_NAMED_PRESETS);
+  assert.equal(replaced.named[0]?.settings.dateFormat, "YY-MM-DD");
 });

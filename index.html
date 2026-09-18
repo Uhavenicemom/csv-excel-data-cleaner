@@ -8,7 +8,7 @@
     <title>Data Cleaner — local CSV & Excel cleanup</title>
     <script src="theme-boot.js"></script>
     <link rel="stylesheet" href="styles.css" />
-    <script defer src="app.js?v=6"></script>
+    <script defer src="app.js?v=7"></script>
   </head>
   <body>
     <main class="app-shell" aria-label="Data Cleaner">
@@ -34,13 +34,13 @@
         </header>
 
         <section class="r-file-intake file-card" aria-label="File intake">
-          <input id="fileInput" type="file" accept=".csv,.xlsx" hidden />
+          <input id="fileInput" type="file" accept=".csv,.xlsx" multiple hidden />
           <button class="file-drop" id="fileDrop" type="button" aria-describedby="fileHelp">
             <span class="file-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3.75h8l4 4V20.25H6z"/><path d="M14 3.75v4h4"/></svg>
             </span>
             <span class="file-copy"><strong id="fileName">customers_dirty.csv</strong><small id="fileMeta">Demo data · 10 rows</small></span>
-            <span class="change-file" id="changeFile">Choose file</span>
+            <span class="change-file" id="changeFile">Choose files</span>
           </button>
           <span class="sr-only" id="fileHelp">Choose a CSV or Excel file. Files stay in your browser.</span>
           <p class="file-limit" id="fileLimit">Files up to 50 MB. Larger files may take longer to process.</p>
@@ -74,6 +74,45 @@
             </select>
             <span class="field-hint" id="dateSettingsHelp" hidden></span>
           </label>
+        </section>
+
+        <section class="preset-bar" aria-labelledby="presetTitle">
+          <div class="preset-copy"><strong id="presetTitle">Cleaning preset</strong><small>Only settings are stored in this browser</small></div>
+          <label class="preset-select">Saved settings
+            <select id="presetSelect"><option value="last-used">Last used</option></select>
+          </label>
+          <div class="preset-actions">
+            <button class="secondary-button" id="presetSave" type="button">Save as preset</button>
+            <button class="text-button" id="presetDelete" type="button" disabled>Delete</button>
+            <button class="text-button" id="presetReset" type="button">Reset defaults</button>
+          </div>
+          <form class="preset-create" id="presetForm" hidden>
+            <label>Preset name<input id="presetName" type="text" maxlength="40" autocomplete="off" /></label>
+            <button class="secondary-button" id="presetCreate" type="submit">Save preset</button>
+            <button class="text-button" id="presetCancel" type="button">Cancel</button>
+          </form>
+        </section>
+
+        <section class="batch-panel" id="batchPanel" aria-labelledby="batchTitle" hidden>
+          <header class="batch-header">
+            <div><h2 id="batchTitle">Batch queue</h2><p id="batchSummary" aria-live="polite">0 files</p></div>
+            <label>Batch output
+              <select id="batchOutputMode">
+                <option value="original">Keep original</option>
+                <option value="csv">All CSV</option>
+                <option value="xlsx">All XLSX</option>
+              </select>
+            </label>
+            <button class="text-button" id="batchCancel" type="button">Cancel remaining</button>
+          </header>
+          <div class="batch-queue" id="batchQueue" role="list" aria-label="Files in batch"></div>
+          <div class="batch-review-actions" id="batchReviewActions" hidden>
+            <p id="batchReviewCopy"></p>
+            <button class="secondary-button" id="batchConfirmSheet" type="button" hidden>Confirm worksheet</button>
+            <button class="secondary-button" id="batchSafeExport" type="button" hidden>Use safe export</button>
+            <button class="secondary-button" id="batchRetry" type="button" hidden>Retry file</button>
+            <button class="text-button" id="batchApprove" type="button">Approve as is</button>
+          </div>
         </section>
 
         <section class="rules-panel" aria-labelledby="rulesTitle">
