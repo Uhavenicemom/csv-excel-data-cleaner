@@ -51,6 +51,9 @@ if (!/"typecheck"\s*:\s*"tsc --noEmit"/.test(packageJson)) failures.push("The ty
 if (/"pnpm"\s*:/.test(packageJson)) failures.push("pnpm settings must live in pnpm-workspace.yaml, not package.json.");
 if (!/^allowBuilds:\s*\r?\n\s+esbuild:\s*true\s*$/m.test(pnpmWorkspace)) failures.push("The pnpm build-script allowlist is missing or broader than esbuild.");
 if (!/maxCells:\s*2_000_000/.test(source)) failures.push("The structural table limits are missing.");
+if (!/batchOutputMode\.addEventListener\("change", handleBatchOutputChange\)/.test(source)) {
+  failures.push("Changing the batch export format can accidentally re-run cleaning preferences and discard review decisions.");
+}
 if (!/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(styles)) failures.push("The hidden-state CSS guard is missing.");
 if (!app.includes("initialize();")) failures.push("The generated app bundle does not initialize.");
 if (!worker.includes("scope.onmessage")) failures.push("The generated worker bundle has no message handler.");
@@ -73,3 +76,4 @@ if (failures.length) {
 } else {
   console.log(`Audit passed: ${ids.length} IDs, ${requiredIds.length} required controls, no stale or remote runtime elements.`);
 }
+
