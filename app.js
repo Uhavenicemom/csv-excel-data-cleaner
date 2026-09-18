@@ -2210,6 +2210,17 @@
     updateUI({ announceChange: true });
     renderBatchPanel();
   }
+  function handleBatchOutputChange() {
+    activePresetSettings = currentPresetSettings();
+    rememberLastUsed();
+    const active = activeBatchItem();
+    if (active) {
+      els.outputFormat.value = batchOutputFormat(activePresetSettings.batchOutputMode, active.file.name);
+    }
+    updateUI();
+    renderBatchPanel();
+    announce("Batch output format updated. Existing review decisions were kept.");
+  }
   function loadSelectedPreset() {
     const selected = els.presetSelect.value;
     const settings = selected === "last-used" ? presetStore.lastUsed : presetStore.named.find((preset) => preset.id === selected)?.settings;
@@ -2297,7 +2308,7 @@
       els.dateFormat
     ].forEach((control) => control.addEventListener("change", handlePreferenceChange));
     els.inputDateOrder.addEventListener("change", handlePreferenceChange);
-    els.batchOutputMode.addEventListener("change", handlePreferenceChange);
+    els.batchOutputMode.addEventListener("change", handleBatchOutputChange);
     [
       [els.dedupColumn, "dedup"],
       [els.emailColumn, "email"],
